@@ -617,16 +617,28 @@ function speciesName(key,col){
 /* ============================================================================
    FOLIAGE — honest recursion
    ========================================================================== */
+/* A frond is hundreds of these, so the cost here sets how long a bouquet takes
+   to appear. Detail is spent only where it can actually be seen: tiny leaflets
+   get a flat fill, and every vein on a blade is stroked as one path. */
 function leafBlade(L,Wd,c){
   petalPath(L,Wd,{round:0.05,belly:0.45,base:0.2});
+  if(L<9){                                   // a few pixels across — shading is invisible
+    ctx.fillStyle=hsl(c.h,c.s,c.l+1); ctx.fill(); return;
+  }
   const g=ctx.createLinearGradient(-Wd*.4,0,Wd*.5,-L);
   g.addColorStop(0,hsl(c.h,c.s,Math.max(12,c.l-8))); g.addColorStop(1,hsl(c.h-6,c.s-6,c.l+10));
   ctx.fillStyle=g; ctx.fill();
+  if(L<20) return;                           // veins would land inside one pixel
   ctx.strokeStyle=hsl(c.h,c.s,Math.max(10,c.l-14),.5); ctx.lineWidth=Math.max(.5,Wd*0.03);
-  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-L); ctx.stroke();
-  const vs=Math.max(3,Math.floor(L/10));
-  for(let i=1;i<=vs;i++){const y=-L*i/(vs+1),w=Wd*0.5*(1-i/(vs+1));
-    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(-w,y-w*0.7); ctx.moveTo(0,y); ctx.lineTo(w,y-w*0.7); ctx.stroke();}
+  const vs=Math.min(6,Math.max(3,Math.floor(L/12)));
+  ctx.beginPath();
+  ctx.moveTo(0,0); ctx.lineTo(0,-L);         // midrib and side veins in a single path
+  for(let i=1;i<=vs;i++){
+    const y=-L*i/(vs+1), w=Wd*0.5*(1-i/(vs+1));
+    ctx.moveTo(0,y); ctx.lineTo(-w,y-w*0.7);
+    ctx.moveTo(0,y); ctx.lineTo( w,y-w*0.7);
+  }
+  ctx.stroke();
 }
 // bipinnate frond: every leaflet on the rachis is itself a smaller frond
 function fern(len,depth,col){
@@ -857,7 +869,9 @@ function makeItem(kind,opts){
     spKey:o.spKey||null,
     col:{h:o.col?.h??0, s:o.col?.s??0, l:o.col?.l??0, warm:o.col?.warm??false},
     ux:o.ux??0, uy:o.uy??0, size:o.size??80, rot:o.rot??0,
-    seed:o.seed??newSeed(), delay:o.delay??0,
+    // drawn from the active stream, so a scene seed reproduces its bouquet
+    // exactly — and revisiting that seed reuses the cached fronds
+    seed:o.seed??(Math.floor(RNG()*4294967296)>>>0), delay:o.delay??0,
     hideStem:o.hideStem??false, stemJitter:o.stemJitter??0,
   };
 }
@@ -903,7 +917,7 @@ function buildScene(seed,opts){
         ux:u*rr(40,110), uy:-rr(50,130),
         size:lerp(rr(380,450), rr(300,360), outward),   // tallest through the middle
         rot:u*rr(0.8,1.3)+gauss(0,0.08),
-        stemJitter:gauss(0,5), delay:rr(0,.25)}));
+        stemJitter:gauss(0,5), delay:rr(0,.16)}));
     }
     for(let i=0;i<ri(3,5);i++){
       const u=(i%2?1:-1);
@@ -911,7 +925,7 @@ function buildScene(seed,opts){
         col:{...pal.foliage,l:pal.foliage.l+4},
         ux:u*rr(35,105), uy:-rr(45,120), size:rr(300,390),
         rot:u*rr(0.85,1.35)+gauss(0,0.08),
-        stemJitter:gauss(0,5), delay:rr(0,.25)}));
+        stemJitter:gauss(0,5), delay:rr(0,.16)}));
     }
 
     const N=ri(15,20);
@@ -929,7 +943,7 @@ function buildScene(seed,opts){
         ux, uy, size:(spKey===hero?rr(88,116):rr(62,96))*(isFront?1.06:0.9),
         rot:gauss(0,0.18),
         hideStem:Math.abs(ux)<SPREAD*0.34&&chance(.75), stemJitter:gauss(0,6),
-        z:uy+(isFront?200:0)+rnd()*20, delay:rr(0,0.5)}));
+        z:uy+(isFront?200:0)+rnd()*20, delay:rr(0,0.34)}));
     }
     // heart of the dome — without these it reads as a crescent with a hole
     for(let i=0;i<ri(3,5);i++){
@@ -940,7 +954,7 @@ function buildScene(seed,opts){
         ux:Math.sin(ang)*rad*1.06+gauss(0,10),
         uy:-(Math.cos(ang)*rad*0.86+LIFT)+gauss(0,12),
         size:rr(62,90), rot:gauss(0,0.2),
-        hideStem:true, z:-140+rnd()*60, delay:rr(0,0.45)}));
+        hideStem:true, z:-140+rnd()*60, delay:rr(0,0.3)}));
     }
     mid.sort((a,b)=>a.z-b.z);
 
@@ -952,7 +966,7 @@ function buildScene(seed,opts){
         col:{...breathCol, s:breathCol.s+gauss(0,4), l:clamp(breathCol.l+gauss(0,3),72,96)},
         ux:u*rr(70,210)+gauss(0,18), uy:-rr(90,240), size:rr(52,84),
         rot:u*rr(0.25,0.72)+gauss(0,0.1),
-        stemJitter:gauss(0,6), delay:rr(.2,.7)});
+        stemJitter:gauss(0,6), delay:rr(.12,.42)});
       (chance(.4)?front:back).push(sprig);
     }
   }
@@ -1105,21 +1119,28 @@ function foliageSprite(it){
   const real=swapCtx(o);
   if(it.kind==='fern') fern(size,2,it.col); else eucalyptus(size,it.col);
   swapCtx(real); RNG=prevRNG;
-  // A quarter-resolution alpha mask, so clicking a frond only catches where
-  // leaves actually are. A bounding circle would swallow every click in the
-  // large empty gaps between leaflets.
-  const img=o.getImageData(0,0,c.width,c.height).data;
-  const mw=Math.ceil(c.width/4), mh=Math.ceil(c.height/4);
-  const mask=new Uint8Array(mw*mh);
-  for(let y=0;y<c.height;y+=2){
-    const row=(y>>2)*mw, base=y*c.width;
-    for(let x=0;x<c.width;x+=2)
-      if(img[(base+x)*4+3]>24) mask[row+(x>>2)]=1;
-  }
-  const sp={canvas:c,q,padX,padTop,w:c.width,h:c.height,mask,mw,mh};
+  // The alpha mask is only needed for click-testing, so it is built on first
+  // use rather than on every regenerate — nobody is clicking a bouquet they
+  // have not seen yet.
+  const sp={canvas:c,q,padX,padTop,w:c.width,h:c.height,mask:null,mw:0,mh:0};
   SPRITES.set(key,sp);
   if(SPRITES.size>56) SPRITES.delete(SPRITES.keys().next().value);
   return sp;
+}
+// quarter-resolution alpha mask, so a click on a frond only lands where leaves
+// actually are instead of anywhere inside its bounding circle
+function buildSpriteMask(sp){
+  try{
+    const img=sp.canvas.getContext('2d').getImageData(0,0,sp.w,sp.h).data;
+    const mw=Math.ceil(sp.w/4), mh=Math.ceil(sp.h/4);
+    const mask=new Uint8Array(mw*mh);
+    for(let y=0;y<sp.h;y+=2){
+      const row=(y>>2)*mw, base=y*sp.w;
+      for(let x=0;x<sp.w;x+=2)
+        if(img[(base+x)*4+3]>24) mask[row+(x>>2)]=1;
+    }
+    sp.mask=mask; sp.mw=mw; sp.mh=mh;
+  }catch(_){ sp.mask=null; }
 }
 function drawItem(it,S,cx,mouthY,grow){
   ctx.save();
@@ -1162,6 +1183,10 @@ function selectionOverlay(S,cx,mouthY){
   ctx.restore();
 }
 let START=null, RAF=null, WATCHDOG=null, ARRANGING=false;
+// Drawing a bouquet costs ~20ms, so this is the whole of the wait a person
+// feels on a regenerate. Long enough to read as blooming, short enough to
+// press again straight away.
+const INTRO_MS=1150;
 const reduceMotion=matchMedia('(prefers-reduced-motion:reduce)').matches;
 function eased(t,delay,back){
   const d=clamp((t-delay)/(1-delay*0.6),0,1);
@@ -1173,7 +1198,7 @@ function render(now){
   // Petal curl, fern leaflets and floret packing all draw with rr()/gauss().
   // Re-seed per frame so the same bouquet draws identically every time.
   RNG=mulberry32((CURRENT_SEED^0x9e3779b9)>>>0);
-  const t=(ARRANGING||reduceMotion)?1:clamp((now-START)/1900,0,1);
+  const t=(ARRANGING||reduceMotion)?1:clamp((now-START)/INTRO_MS,0,1);
 
   ground();
   drawVesselBack(SCENE.vase,S,cx,mouthY);
@@ -1193,7 +1218,7 @@ function repaint(){
   START=null; if(RAF)cancelAnimationFrame(RAF);
   RAF=requestAnimationFrame(render);
   clearTimeout(WATCHDOG);
-  WATCHDOG=setTimeout(()=>{ if(RAF){cancelAnimationFrame(RAF);RAF=null;} START=-1e9; render(performance.now()); },2400);
+  WATCHDOG=setTimeout(()=>{ if(RAF){cancelAnimationFrame(RAF);RAF=null;} START=-1e9; render(performance.now()); },INTRO_MS+450);
 }
 let paintQueued=false;
 function paintNow(){                       // one repaint per frame while dragging
@@ -1211,6 +1236,7 @@ function itemHitTest(it,S,cx,mouthY,px,py){
   if(dx*dx+dy*dy > g.r*g.r) return false;          // cheap reject
   if(it.kind!=='fern' && it.kind!=='euc') return true;
   const sp=foliageSprite(it);
+  if(!sp.mask) buildSpriteMask(sp);
   if(!sp.mask) return true;
   // into the frond's own unrotated space, then into mask pixels
   const ax=px-(cx+it.ux*S), ay=py-(mouthY+it.uy*S);
