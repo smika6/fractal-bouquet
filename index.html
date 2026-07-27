@@ -1,0 +1,851 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Generative Still Life — a fractal bouquet</title>
+<style>
+  :root{
+    --ground:#16130f; --ground-2:#0d0b08;
+    --ink:#ede6d6; --muted:#9a9081; --accent:#c9a24b; --line:#3a342c;
+    --serif:"Palatino Linotype","Book Antiqua",Palatino,"Iowan Old Style",Georgia,"Times New Roman",serif;
+    --sans:ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:var(--serif); overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  #stage{position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:manipulation}
+
+  /* ---- museum placard ---- */
+  .placard{
+    position:fixed; left:clamp(16px,3.2vw,44px); bottom:clamp(16px,3.4vh,40px);
+    max-width:min(78vw,420px); z-index:5; pointer-events:none;
+    text-shadow:0 1px 10px rgba(0,0,0,.55);
+    animation:rise 1.1s .4s both cubic-bezier(.2,.7,.2,1);
+  }
+  /* scrim so the label stays legible over whatever bloom falls behind it */
+  .placard::before{
+    content:""; position:absolute; inset:-46px -110px -70px -70px; z-index:-1;
+    background:radial-gradient(115% 105% at 0% 100%,
+      rgba(9,7,5,.86) 0%, rgba(9,7,5,.62) 42%, rgba(9,7,5,.22) 66%, rgba(9,7,5,0) 80%);
+  }
+  .eyebrow{
+    font-family:var(--sans); font-size:11px; letter-spacing:.34em; text-transform:uppercase;
+    color:var(--accent); margin:0 0 .5em; font-weight:600;
+    display:flex; align-items:center; gap:.7em;
+  }
+  .eyebrow::before{content:""; width:26px; height:1px; background:linear-gradient(90deg,var(--accent),transparent)}
+  .title{
+    font-size:clamp(23px,3.4vw,36px); line-height:1.06; margin:0; font-style:italic; font-weight:500;
+    letter-spacing:.005em; text-wrap:balance;
+  }
+  .species{
+    font-family:var(--sans); font-size:12.5px; letter-spacing:.02em; color:var(--muted);
+    margin:.75em 0 0; line-height:1.5; font-weight:400;
+  }
+  .meta{
+    font-family:var(--sans); font-size:10.5px; letter-spacing:.22em; text-transform:uppercase;
+    color:var(--muted); margin:.7em 0 0; font-variant-numeric:tabular-nums;
+    display:flex; gap:.9em; align-items:center;
+  }
+  .meta b{color:var(--ink); font-weight:600}
+  .meta i{width:4px;height:4px;border-radius:50%;background:var(--line);font-style:normal}
+
+  /* ---- controls ---- */
+  .controls{
+    position:fixed; right:clamp(14px,3vw,34px); bottom:clamp(16px,3.4vh,40px);
+    z-index:5; display:flex; gap:10px; align-items:center;
+    animation:rise 1.1s .55s both cubic-bezier(.2,.7,.2,1);
+  }
+  button{
+    font-family:var(--sans); font-size:11.5px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--ink); background:rgba(30,26,20,.5); border:1px solid var(--line);
+    padding:10px 15px; border-radius:999px; cursor:pointer; backdrop-filter:blur(7px);
+    display:inline-flex; align-items:center; gap:.6em; transition:.22s ease;
+    -webkit-backdrop-filter:blur(7px);
+  }
+  button:hover{border-color:var(--accent); color:#fff; background:rgba(48,40,28,.6); transform:translateY(-1px)}
+  button:active{transform:translateY(0)}
+  button:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+  button svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .hint{
+    position:fixed; top:clamp(14px,3vh,30px); left:0; right:0; text-align:center; z-index:5;
+    font-family:var(--sans); font-size:11px; letter-spacing:.24em; text-transform:uppercase; color:var(--muted);
+    opacity:0; animation:flash 5s .8s both; pointer-events:none;
+  }
+  @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  @keyframes flash{0%{opacity:0}12%,72%{opacity:.85}100%{opacity:0}}
+  @media (prefers-reduced-motion:reduce){
+    .placard,.controls{animation:none} .hint{display:none}
+  }
+</style>
+
+<canvas id="stage"></canvas>
+
+<div class="placard">
+  <p class="eyebrow">Generative Still Life</p>
+  <h1 class="title" id="pTitle">—</h1>
+  <p class="species" id="pSpecies">—</p>
+  <p class="meta"><span>Plate <b id="pSeed">—</b></span><i></i><span id="pScheme">—</span></p>
+</div>
+
+<div class="controls">
+  <button id="regen" title="New arrangement (space)">
+    <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4h-4"/></svg>
+    Regenerate
+  </button>
+  <button id="save" title="Save PNG (s)">
+    <svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 19h16"/></svg>
+    Save
+  </button>
+</div>
+
+<div class="hint">Refresh, or press space, for a new bouquet</div>
+
+<script>
+"use strict";
+/* ============================================================================
+   GENERATIVE STILL LIFE — a fractal bouquet
+   Every load seeds a new arrangement. Flowers are built from botanical
+   primitives; fillers use honest recursion (baby's-breath branching, self
+   similar fern fronds, golden-angle petal spirals).
+   ========================================================================== */
+
+const canvas = document.getElementById('stage');
+const ctx = canvas.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+
+/* ---------- seeded randomness ---------- */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+let RNG = Math.random;
+const rnd  = ()=>RNG();
+const rr   = (a,b)=>a+(b-a)*RNG();
+const ri   = (a,b)=>Math.floor(a+(b-a+1)*RNG());
+const pick = a=>a[Math.floor(RNG()*a.length)];
+const chance = p=>RNG()<p;
+function gauss(m,sd){let u=0,v=0;while(!u)u=RNG();while(!v)v=RNG();return m+sd*Math.sqrt(-2*Math.log(u))*Math.cos(6.283185*v);}
+
+const TAU=Math.PI*2, GOLD=Math.PI*(3-Math.sqrt(5));
+const clamp=(x,a,b)=>x<a?a:x>b?b:x;
+const lerp=(a,b,t)=>a+(b-a)*t;
+const easeOutBack=t=>{const c=1.70158+1;t=t-1;return 1+ (c+1)*t*t*t + c*t*t;};
+const easeOut=t=>1-Math.pow(1-t,3);
+
+/* ---------- colour ---------- */
+const hsl=(h,s,l,a=1)=>`hsla(${((h%360)+360)%360},${clamp(s,0,100)}%,${clamp(l,0,100)}%,${a})`;
+
+/* ============================================================================
+   PALETTE — pick a harmony, derive flower cultivars + foliage + ground
+   ========================================================================== */
+// weighted so tonal arrangements dominate — a triad of pure primaries is
+// technically "harmonious" and still reads as a circus, not a bouquet
+const SCHEMES = {
+  'Analogous':   b=>[b,b+22,b-24,b+44],
+  'Monochrome':  b=>[b,b,b,b],
+  'Complementary':b=>[b,b+14,b+180,b+166],
+  'Split':       b=>[b,b+18,b+150,b+210],
+  'Triad':       b=>[b,b+120,b+240,b+18],
+};
+const SCHEME_WEIGHTS=[['Analogous',34],['Monochrome',24],['Complementary',18],['Split',14],['Triad',10]];
+function pickScheme(){
+  let r=rnd()*SCHEME_WEIGHTS.reduce((a,s)=>a+s[1],0);
+  for(const [n,w] of SCHEME_WEIGHTS){ if((r-=w)<=0) return n; }
+  return 'Analogous';
+}
+// Hues that actually occur in petals. Nothing lands in the green/teal arc —
+// a lime bloom is the fastest way to make a bouquet read as synthetic.
+const FLORAL_BANDS=[
+  {a:338,b:378},   // crimson · red · rose · pink   (wraps past 360)
+  {a:14, b:46},    // coral · apricot · orange
+  {a:44, b:62},    // gold · butter yellow
+  {a:262,b:322},   // violet · purple · magenta
+  {a:212,b:258},   // periwinkle · blue
+];
+function snapHue(h){
+  h=((h%360)+360)%360;
+  let best=h, bd=1e9;
+  for(const B of FLORAL_BANDS){
+    for(const hh of [h,h+360,h-360]){
+      if(hh>=B.a&&hh<=B.b) return ((hh%360)+360)%360;
+      const da=Math.abs(hh-B.a), db=Math.abs(hh-B.b);
+      const d=Math.min(da,db);
+      if(d<bd){ bd=d; best=(da<db?B.a:B.b); }
+    }
+  }
+  return ((best%360)+360)%360;
+}
+function buildPalette(){
+  const base = snapHue(ri(0,359));
+  const name = pickScheme();
+  const hues = SCHEMES[name](base).map(snapHue);
+  const warm = (base<70||base>300);
+  const vivid = chance(.55);
+  const cultivars = hues.map((h,i)=>{
+    const mono = name==='Monochrome';
+    // one bloom in the cast is often a cream/white — florists use them to rest the eye
+    if(!mono && i===hues.length-1 && chance(.45))
+      return {h, s:clamp(gauss(16,7),6,28), l:clamp(gauss(88,4),80,95)};
+    let sat = mono ? clamp(gauss(50,15),22,80) : clamp(gauss(vivid?64:50,13),26,86);
+    const lit = mono ? clamp(38+i*13,30,84) : clamp(gauss(60,10),40,80);
+    // electric blue reads as artificial next to warm blooms — keep the band soft
+    if(h>=206&&h<=260) sat=Math.min(sat,52);
+    return {h, s:sat, l:lit};
+  });
+  // deep muted foliage — bright green competes with the blooms
+  const gH = clamp(gauss(warm?108:132,12),92,146);
+  const foliage = {h:gH, s:clamp(gauss(28,6),18,38), l:clamp(gauss(25,4),18,32)};
+  const gd = ((base+ (warm?200:40))%360);
+  return {name, base, warm, vivid, cultivars, foliage,
+    ground:{h:gd, s:clamp(gauss(22,6),10,32), l:clamp(gauss(8,2),5,12)}};
+}
+
+/* ============================================================================
+   PETAL — one filled, shaded petal drawn up the -Y axis (base at origin)
+   ========================================================================== */
+// Petal outline. `round` is the apex bluntness: 0 = sharp point (lily tepal),
+// 1 = broad rounded cap (rose, poppy). It sets how horizontally the edge
+// arrives at the tip, which is what actually reads as pointed vs. rounded.
+function petalPath(L,Wd,o){
+  o=o||{}; const round=clamp(o.round??0.5,0,1), belly=o.belly??0.55, base=o.base??0.14, curl=o.curl||0;
+  const w=Wd/2, tx=curl*Wd, ty=-L, by=-L*belly;
+  const cap=w*round, lift=L*0.03*(1-round);   // sharp tips overshoot slightly
+  ctx.beginPath();
+  ctx.moveTo(0,0);
+  ctx.bezierCurveTo(w*base, -L*0.04, w*0.99, by*0.55, w, by);           // base → widest
+  ctx.bezierCurveTo(w, -L*(belly+(1-belly)*0.55), tx+cap, ty+lift, tx, ty);   // widest → apex
+  ctx.bezierCurveTo(tx-cap, ty+lift, -w, -L*(belly+(1-belly)*0.55), -w, by);  // mirrored
+  ctx.bezierCurveTo(-w*0.99, by*0.55, -w*base, -L*0.04, 0,0);
+  ctx.closePath();
+}
+// draw a petal with throat→edge gradient, midrib, rim light
+function petal(L,Wd,c,o){
+  o=o||{};
+  petalPath(L,Wd,o);
+  const g=ctx.createLinearGradient(0,0,0,-L);
+  const throatL = o.throatL ?? Math.max(18,c.l-26);
+  const throatH = o.throatH ?? c.h;
+  const throatS = o.throatS ?? Math.min(96,c.s+14);
+  const tipL = o.tipL ?? Math.min(94,c.l+ (o.paleTip?20:6));
+  g.addColorStop(0, hsl(throatH,throatS,throatL));
+  g.addColorStop(0.22, hsl(c.h,c.s,Math.max(throatL,c.l-8)));
+  g.addColorStop(0.6, hsl(c.h,c.s,c.l));
+  g.addColorStop(1, hsl(o.tipH??c.h, Math.max(20,c.s-14), tipL));
+  ctx.fillStyle=g; ctx.fill();
+  if(o.vein!==false){
+    ctx.strokeStyle=hsl(c.h,c.s,Math.max(16,c.l-24),0.28);
+    ctx.lineWidth=Math.max(.6,Wd*0.02);
+    ctx.beginPath(); ctx.moveTo(0,-L*0.06); ctx.quadraticCurveTo(curlX(o)*0.5,-L*0.5,curlX(o),-L*0.9); ctx.stroke();
+  }
+  // rim light on one edge for form
+  petalPath(L,Wd,o);
+  ctx.save(); ctx.clip();
+  const rg=ctx.createLinearGradient(-Wd*0.5,0,Wd*0.5,0);
+  rg.addColorStop(0,hsl(c.h,c.s-10,Math.min(96,c.l+22),0.0));
+  rg.addColorStop(1,hsl(c.h,c.s-10,Math.min(96,c.l+22),0.16));
+  ctx.fillStyle=rg; ctx.fillRect(-Wd,-L,Wd*2,L*1.1);
+  ctx.restore();
+  // Edge definition. Without it, overlapping petals of a pale bloom merge into
+  // one silhouette; pale petals need a firmer edge than saturated ones.
+  if(o.edge!==false){
+    const pale=c.l>72;
+    petalPath(L,Wd,o);
+    ctx.strokeStyle=hsl(c.h,Math.min(92,c.s+6),Math.max(10,c.l-(pale?26:20)),pale?0.42:0.28);
+    ctx.lineWidth=Math.max(.5,Wd*0.014);
+    ctx.stroke();
+  }
+}
+const curlX=o=>((o&&o.curl)||0)*0; // midrib stays roughly central
+
+/* ============================================================================
+   CENTRE FURNITURE — stamens, seed discs, spots
+   ========================================================================== */
+function stamens(n,len,fil,anther,spread,o){
+  o=o||{};
+  for(let i=0;i<n;i++){
+    const a=-Math.PI/2 + (i/(n-1||1)-0.5)*spread + (o.jit?rr(-0.05,0.05):0);
+    const L=len*rr(0.82,1.05);
+    ctx.save(); ctx.rotate(a);
+    ctx.strokeStyle=hsl(fil.h,fil.s,fil.l); ctx.lineWidth=Math.max(1,len*0.035); ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(0,0);
+    ctx.quadraticCurveTo(len*0.12,-L*0.6,len*(o.bend??0.16),-L); ctx.stroke();
+    // anther
+    ctx.translate(len*(o.bend??0.16),-L); ctx.rotate(rr(-0.5,0.5));
+    ctx.fillStyle=hsl(anther.h,anther.s,anther.l);
+    roundRect(-anther.w/2,-anther.h/2,anther.w,anther.h,anther.w*0.5); ctx.fill();
+    if(o.pollen){ctx.fillStyle=hsl(anther.h+8,anther.s,Math.min(88,anther.l+26),.9);
+      for(let k=0;k<5;k++)dot(rr(-anther.w*.4,anther.w*.4),rr(-anther.h*.4,anther.h*.4),anther.w*0.12);}
+    ctx.restore();
+  }
+}
+function seedDisc(R,c,rings){
+  // domed centre with golden-angle floret packing (real phyllotaxis)
+  const g=ctx.createRadialGradient(-R*.3,-R*.3,R*.1,0,0,R);
+  g.addColorStop(0,hsl(c.h,c.s,c.l+14)); g.addColorStop(1,hsl(c.h,c.s+8,Math.max(10,c.l-18)));
+  ctx.fillStyle=g; dot(0,0,R);
+  const N=Math.floor(R*R*0.11)+40;
+  for(let i=0;i<N;i++){
+    const t=i/N, rr2=Math.sqrt(t)*R*0.98, a=i*GOLD;
+    const x=Math.cos(a)*rr2, y=Math.sin(a)*rr2;
+    const edge=rr2/R;
+    const fl = edge>0.72 ? hsl(c.h+12,c.s,Math.min(80,c.l+30)) : hsl(c.h,c.s+6,Math.max(8,c.l-14+edge*18));
+    ctx.fillStyle=fl; dot(x,y,lerp(R*0.045,R*0.03,edge));
+  }
+}
+function freckles(L,Wd,col){
+  ctx.fillStyle=hsl(col.h,col.s,col.l,.85);
+  const n=ri(9,16);
+  for(let i=0;i<n;i++){
+    const yy=-L*rr(0.08,0.5), xx=rr(-Wd*0.3,Wd*0.3)*(1-(-yy/L));
+    dot(xx,yy,rr(Wd*0.02,Wd*0.05));
+  }
+}
+
+/* ============================================================================
+   FLOWER SPECIES
+   ========================================================================== */
+function drawLily(r,c){
+  // 6 recurved tepals in 2 whorls, freckled throat, prominent stamens
+  const inner={h:c.h,s:Math.min(96,c.s+10),l:Math.max(30,c.l-6)};
+  const spotH=(c.h+ (c.warm?-16:150))%360;
+  const spot={h:spotH,s:78,l:38};
+  for(let whorl=0;whorl<2;whorl++){
+    const off=whorl?TAU/6:0, L=r*(whorl?1.02:1.08), Wd=r*(whorl?0.5:0.56);
+    for(let i=0;i<3;i++){
+      ctx.save(); ctx.rotate(off+i*TAU/3);
+      petal(L,Wd,whorl?inner:c,{round:0.08,belly:0.46,base:0.1,curl:rr(-0.02,0.02),
+        paleTip:true, throatL:Math.min(88,c.l+16), throatS:Math.max(20,c.s-30), tipH:c.h, vein:true});
+      // throat wash + freckles
+      ctx.save(); petalPath(L,Wd,{round:0.08,belly:0.46,base:0.1}); ctx.clip();
+      const tg=ctx.createLinearGradient(0,0,0,-L*0.6);
+      tg.addColorStop(0,hsl(c.h,Math.min(96,c.s+18),Math.min(86,c.l+18),.9));
+      tg.addColorStop(1,hsl(c.h,c.s,c.l,0)); ctx.fillStyle=tg; ctx.fillRect(-Wd,-L,Wd*2,L);
+      freckles(L*0.9,Wd,spot); ctx.restore();
+      ctx.restore();
+    }
+  }
+  // stamens + pistil
+  stamens(6, r*0.66, {h:c.h,s:30,l:80}, {h:(c.h+ (c.warm?-20:20))%360,s:60,l:34,w:r*0.11,h:r*0.055},
+    TAU*0.9, {pollen:true,jit:true,bend:0.2});
+  ctx.strokeStyle=hsl(c.h,26,74); ctx.lineWidth=r*0.03; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-r*0.5); ctx.stroke();
+  ctx.fillStyle=hsl(c.h,40,42); dot(0,-r*0.5,r*0.04);
+}
+
+function drawRose(r,c){
+  // golden-angle petal spiral, cupped centre opening outward
+  const layers=ri(5,7);
+  for(let layer=layers-1; layer>=0; layer--){
+    const t=layer/(layers-1);                    // 0 centre .. 1 outer
+    const count=Math.round(lerp(5,9,t));
+    const L=r*lerp(0.34,1.0,t), Wd=r*lerp(0.34,0.66,t);
+    const open=lerp(0.12,0.5,t);
+    const ll=lerp(-10,4,t);
+    for(let i=0;i<count;i++){
+      ctx.save();
+      ctx.rotate(i/count*TAU + layer*GOLD + rr(-0.05,0.05));
+      ctx.translate(0,-L*open*0.5);
+      petal(L,Wd,{h:c.h,s:c.s,l:clamp(c.l+ll,26,86)},
+        {round:1,belly:0.66,base:0.55,curl:rr(-0.06,0.06),paleTip:false,vein:false,
+         throatL:Math.max(18,c.l-20), tipL:Math.min(88,c.l+ (1-t)*10)});
+      ctx.restore();
+    }
+  }
+  ctx.fillStyle=hsl(c.h,c.s+8,Math.max(16,c.l-22)); dot(0,0,r*0.08);
+}
+
+function drawRanunculus(r,c){
+  const layers=ri(7,9);
+  for(let layer=layers-1; layer>=0; layer--){
+    const t=layer/(layers-1);
+    const count=Math.round(lerp(6,13,t));
+    const L=r*lerp(0.2,0.98,t), Wd=r*lerp(0.26,0.44,t);
+    const ll=lerp(-16,2,t);
+    for(let i=0;i<count;i++){
+      ctx.save(); ctx.rotate(i/count*TAU + layer*GOLD);
+      ctx.translate(0,-L*0.16);
+      petal(L,Wd,{h:c.h,s:c.s,l:clamp(c.l+ll,20,86)},
+        {round:1,belly:0.74,base:0.62,curl:rr(-0.04,0.04),vein:false});
+      ctx.restore();
+    }
+  }
+  ctx.fillStyle=hsl(c.h,c.s,Math.max(14,c.l-26)); dot(0,0,r*0.14);
+}
+
+function drawDaisy(r,c){
+  // ray florets around a golden-angle disc (gerbera / marguerite)
+  const disc=r*rr(0.3,0.42);
+  const petalC={h:c.h,s:c.s,l:Math.min(86,c.l+6)};
+  for(let ring=0;ring<2;ring++){
+    const count=ri(13,21)+ring*3, L=r*(ring?0.84:1.0), Wd=r*rr(0.14,0.2);
+    for(let i=0;i<count;i++){
+      ctx.save(); ctx.rotate(i/count*TAU + ring*0.2 + rr(-0.03,0.03));
+      ctx.translate(0,-disc*0.7);
+      petal(L,Wd,petalC,{round:0.85,belly:0.5,base:0.5,paleTip:true,vein:false,
+        tipL:Math.min(92,c.l+16), throatL:Math.max(28,c.l-6)});
+      ctx.restore();
+    }
+  }
+  const dc=chance(.5)?{h:48,s:70,l:46}:{h:28,s:48,l:22};   // golden or chocolate disc
+  seedDisc(disc,dc,3);
+}
+
+function drawTulip(r,c){
+  // cupped goblet: 3 back tepals wide open, 3 front tepals hugging the cup
+  for(let i=0;i<3;i++){
+    ctx.save(); ctx.rotate(TAU/6+i*TAU/3);
+    petal(r*1.0, r*0.62, {h:c.h,s:c.s,l:c.l-10},
+      {round:0.92,belly:0.58,base:0.6,curl:rr(-0.04,0.04),
+       throatL:Math.max(16,c.l-26), tipL:Math.min(82,c.l+4)});
+    ctx.restore();
+  }
+  for(let i=0;i<3;i++){
+    ctx.save(); ctx.rotate(i*TAU/3);
+    ctx.translate(0,-r*0.05);
+    petal(r*0.88, r*0.68, {h:c.h,s:Math.min(94,c.s+4),l:c.l},
+      {round:0.95,belly:0.7,base:0.76,curl:rr(-0.03,0.03),
+       throatL:Math.max(14,c.l-28), throatH:(c.h+(c.warm?-10:6))%360, tipL:Math.min(86,c.l+10)});
+    ctx.restore();
+  }
+  // the darker basal blotch a head-on tulip shows, kept soft so it reads as
+  // depth in the cup rather than a painted-on shape
+  const bg=ctx.createRadialGradient(0,0,r*0.02,0,0,r*0.2);
+  bg.addColorStop(0,hsl(c.h,Math.min(96,c.s+10),Math.max(10,c.l-32),.7));
+  bg.addColorStop(1,hsl(c.h,c.s,Math.max(10,c.l-32),0));
+  ctx.fillStyle=bg; dot(0,0,r*0.2);
+}
+
+function drawPoppy(r,c){
+  const n=ri(4,6);
+  for(let i=0;i<n;i++){
+    ctx.save(); ctx.rotate(i/n*TAU + rr(-0.1,0.1));
+    // crinkled broad petal
+    const L=r*rr(0.9,1.02), Wd=r*rr(0.86,1.02);
+    petal(L,Wd,c,{round:1,belly:0.42,base:0.7,curl:rr(-0.05,0.05),
+      throatL:22,throatS:Math.min(96,c.s+16),throatH:(c.h+ (c.warm?-6:8))%360, tipL:Math.min(80,c.l+6)});
+    ctx.restore();
+  }
+  // dark basal ring + capsule + stamen crown
+  ctx.fillStyle=hsl(c.h,60,10,.9); dot(0,0,r*0.3);
+  ctx.fillStyle=hsl(c.h,40,6); dot(0,0,r*0.13);
+  ctx.fillStyle=hsl(c.h,20,20,.9);
+  for(let i=0;i<26;i++){const a=i/26*TAU,rr2=r*rr(0.16,0.28);dot(Math.cos(a)*rr2,Math.sin(a)*rr2,r*0.02);}
+}
+
+function drawAnemone(r,c){
+  const n=ri(6,8);
+  for(let i=0;i<n;i++){
+    ctx.save(); ctx.rotate(i/n*TAU + rr(-0.06,0.06));
+    petal(r*rr(0.94,1.04), r*rr(0.4,0.5), c,
+      {round:0.9,belly:0.56,base:0.4,throatL:Math.max(18,c.l-18)});
+    ctx.restore();
+  }
+  ctx.fillStyle=hsl(c.h,40,8); dot(0,0,r*0.34);
+  ctx.fillStyle=hsl((c.h+20)%360,30,16);
+  for(let i=0;i<40;i++){const a=i*GOLD,rr2=Math.sqrt(i/40)*r*0.3;dot(Math.cos(a)*rr2,Math.sin(a)*rr2,r*0.018);}
+  ctx.fillStyle=hsl(c.h,30,4); dot(0,0,r*0.12);
+}
+
+// cultivar naming keyed to the bloom's real colour, so the placard rings true
+function hueBand(c){
+  if(c.l>78&&c.s<38) return 'white';
+  const h=((c.h%360)+360)%360;
+  if(h<18||h>=345) return 'red';
+  if(h<48) return 'orange';
+  if(h<70) return 'yellow';
+  if(h<170) return 'green';
+  if(h<255) return 'blue';
+  if(h<300) return 'violet';
+  return 'pink';
+}
+const CULTIVARS={
+  lily:{white:'‘Casa Blanca’ Lily',red:'‘Black Out’ Lily',orange:'Tiger Lily',yellow:'‘Golden Splendour’ Lily',
+    green:'‘Green Planet’ Lily',blue:'‘Twilight’ Lily',violet:'‘Purple Prince’ Lily',pink:'‘Stargazer’ Lily'},
+  rose:{white:'‘Iceberg’ Rose',red:'‘Mister Lincoln’ Rose',orange:'‘Lady of Shalott’ Rose',yellow:'‘Graham Thomas’ Rose',
+    green:'‘Greensleeves’ Rose',blue:'‘Blue Moon’ Rose',violet:'‘Ebb Tide’ Rose',pink:'‘Juliet’ Rose'},
+  tulip:{white:'‘Maureen’ Tulip',red:'‘Kingsblood’ Tulip',orange:'‘Ballerina’ Tulip',yellow:'‘Golden Parade’ Tulip',
+    green:'‘Spring Green’ Tulip',blue:'‘Bleu Aimable’ Tulip',violet:'‘Queen of Night’ Tulip',pink:'‘Angélique’ Tulip'},
+  daisy:{white:'Marguerite',yellow:'‘Sundance’ Gerbera'},
+  poppy:{white:'Icelandic Poppy',red:'Oriental Poppy',orange:'Californian Poppy'},
+};
+const SPECIES = {
+  lily:{fn:drawLily,plural:'Lilies',plain:'Lily'},
+  rose:{fn:drawRose,plural:'Roses',plain:'Garden Rose'},
+  ranunculus:{fn:drawRanunculus,plural:'Ranunculus',plain:'Persian Ranunculus'},
+  daisy:{fn:drawDaisy,plural:'Gerberas',plain:'Gerbera Daisy'},
+  tulip:{fn:drawTulip,plural:'Tulips',plain:'French Tulip'},
+  poppy:{fn:drawPoppy,plural:'Poppies',plain:'Poppy'},
+  anemone:{fn:drawAnemone,plural:'Anemones',plain:'Windflower'},
+};
+function speciesName(key,col){
+  const table=CULTIVARS[key];
+  return (table&&table[hueBand(col)]) || SPECIES[key].plain;
+}
+
+/* ============================================================================
+   FOLIAGE & FILLERS — honest recursion
+   ========================================================================== */
+// self-similar fern frond: rachis bearing ever-smaller leaflets; each leaflet
+// on the primary frond is itself a small frond (bipinnate) — bounded recursion
+function fern(len,depth,col){
+  if(depth<=0||len<8)return;
+  ctx.strokeStyle=hsl(col.h,col.s,col.l); ctx.lineWidth=Math.max(.6,len*0.02); ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(len*0.06,-len*0.5,0,-len); ctx.stroke();
+  const pairs=Math.min(11,Math.max(4,Math.floor(len/24)));
+  for(let i=1;i<=pairs;i++){
+    const t=i/(pairs+1), y=-len*t, sub=len*(1-t)*0.5;
+    for(const s of [-1,1]){
+      ctx.save(); ctx.translate(0, y); ctx.rotate(s*(0.85-t*0.25));
+      // lightness lifts slightly toward the tip, but is capped so foliage never glows
+      if(depth>1 && sub>22) fern(sub, depth-1, {h:col.h,s:col.s,l:Math.min(col.l+i*0.5,col.l+4)});
+      else leafBlade(sub, sub*0.34, {h:col.h,s:col.s+4,l:Math.min(col.l+4,31)});
+      ctx.restore();
+    }
+  }
+  // a terminal leaflet at the tip
+  ctx.save(); ctx.translate(0,-len); leafBlade(len*0.28, len*0.1, {h:col.h,s:col.s+6,l:col.l+8}); ctx.restore();
+}
+function leafBlade(L,Wd,c){
+  petalPath(L,Wd,{round:0.05,belly:0.45,base:0.2});
+  const g=ctx.createLinearGradient(-Wd*.4,0,Wd*.5,-L);
+  g.addColorStop(0,hsl(c.h,c.s,Math.max(12,c.l-8))); g.addColorStop(1,hsl(c.h-6,c.s-6,c.l+10));
+  ctx.fillStyle=g; ctx.fill();
+  // fractal-ish central + side veins
+  ctx.strokeStyle=hsl(c.h,c.s,Math.max(10,c.l-14),.5); ctx.lineWidth=Math.max(.5,Wd*0.03);
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-L); ctx.stroke();
+  const vs=Math.max(3,Math.floor(L/10));
+  for(let i=1;i<=vs;i++){const y=-L*i/(vs+1),w=Wd*0.5*(1-i/(vs+1));
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(-w,y-w*0.7); ctx.moveTo(0,y); ctx.lineTo(w,y-w*0.7); ctx.stroke();}
+}
+// baby's-breath: recursive binary branching with a tiny bloom at each tip
+function babysBreath(len,depth,col){
+  if(depth<=0){
+    ctx.fillStyle=hsl(col.h,col.s,col.l);
+    for(let i=0;i<5;i++){const a=i/5*TAU;dot(Math.cos(a)*2.2,Math.sin(a)*2.2-0,1.5);}
+    ctx.fillStyle=hsl(col.h+20,Math.min(60,col.s+30),Math.max(40,col.l-18)); dot(0,0,1.1);
+    return;
+  }
+  ctx.strokeStyle=hsl(120,18,42,.7); ctx.lineWidth=Math.max(.4,depth*0.4);
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-len); ctx.stroke();
+  ctx.save(); ctx.translate(0,-len);
+  const br=ri(2,3);
+  for(let i=0;i<br;i++){
+    const a=(i-(br-1)/2)*rr(0.4,0.6)+rr(-0.1,0.1);
+    ctx.save(); ctx.rotate(a); babysBreath(len*rr(0.6,0.78),depth-1,col); ctx.restore();
+  }
+  ctx.restore();
+}
+// eucalyptus sprig: paired round leaves spaced along a curved stem
+function eucalyptus(len,col){
+  ctx.strokeStyle=hsl(col.h,col.s,col.l); ctx.lineWidth=Math.max(1.2,len*0.012);
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(len*0.2,-len*0.5,len*0.05,-len); ctx.stroke();
+  const n=Math.max(3,Math.floor(len/52));           // widely spaced pairs
+  for(let i=1;i<=n;i++){
+    const t=i/(n+0.6), y=-len*t, x=len*0.2*Math.sin(t*Math.PI)*0.6;
+    const sz=len*0.1*(1-t*0.35);
+    for(const s of[-1,1]){
+      // stagger the pair so the leaves don't chain into a caterpillar
+      ctx.save(); ctx.translate(x, y+s*len*0.035); ctx.rotate(s*1.15-0.18);
+      const l=Math.min(col.l+5, 36);
+      const g=ctx.createLinearGradient(0,-sz*0.6,0,sz*0.6);
+      g.addColorStop(0,hsl(col.h,col.s+4,l+4)); g.addColorStop(1,hsl(col.h,col.s,Math.max(14,l-6)));
+      ctx.fillStyle=g;
+      ctx.beginPath(); ctx.ellipse(s*sz*0.85,0,sz*0.92,sz*0.78,0,0,TAU); ctx.fill();
+      ctx.restore();
+    }
+  }
+}
+
+/* ---------- tiny canvas helpers ---------- */
+function dot(x,y,r){ctx.beginPath();ctx.arc(x,y,r,0,TAU);ctx.fill();}
+function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+
+/* ============================================================================
+   COMPOSITION — assemble a bouquet in unit space (1 unit = S px)
+   ========================================================================== */
+let SCENE=null;
+function buildScene(){
+  const pal=buildPalette();
+  const speciesKeys=Object.keys(SPECIES);
+  // choose a cast: 2–4 distinct species, always weight toward a hero
+  const cast=[];
+  const hero=pick(['lily','rose','lily','ranunculus','daisy','tulip','poppy','anemone']);
+  cast.push(hero);
+  while(cast.length< ri(3,4)){const k=pick(speciesKeys); if(!cast.includes(k))cast.push(k);}
+
+  const castOthers = cast.filter(k=>k!==hero);
+  if(!castOthers.length) castOthers.push(pick(speciesKeys.filter(k=>k!==hero)));
+  const blooms=[];
+  const N=ri(11,15);
+  const spread=rr(330,390);
+  // florist's rule: one hue carries the arrangement, a second accents it
+  const dominant=pal.cultivars[0];
+  const pickCultivar=()=> chance(.62) ? dominant : pick(pal.cultivars.slice(1));
+  for(const i of Array.from({length:N},(_,k)=>k)){
+    // blooms sit on a dome above the tie: angle sweeps the fan, radius is
+    // biased outward so the crown fills instead of bunching at the stems
+    const u=(i/(N-1))*2-1;                          // -1..1 across
+    const ang=u*rr(1.02,1.2) + gauss(0,0.1);        // angle from vertical
+    const rad=lerp(0.42,1,rnd())*spread;
+    const ux=Math.sin(ang)*rad*1.06 + gauss(0,12);
+    const uy=-(Math.cos(ang)*rad*0.86 + 96) + gauss(0,14);
+    const front = uy > -spread*0.66;                // lower blooms read as nearer
+    // the hero leads but must not crowd out the cast, or every bouquet
+    // becomes a row of one flower repeated
+    const spKey = i===0 ? hero : (chance(.34)?hero:pick(castOthers));
+    const base = pickCultivar();
+    const col = {h:base.h+gauss(0,5), s:clamp(base.s+gauss(0,5),12,92),
+                 l:clamp(base.l+gauss(0,4),24,92)};  // sibling blooms vary slightly
+    const size = (spKey===hero? rr(88,116):rr(62,96)) * (front?1.06:0.9);
+    blooms.push({spKey, col:{...col,warm:pal.warm}, ux,uy, size,
+      hideStem: Math.abs(ux)<spread*0.34 && chance(.75), stemJitter: gauss(0,6),
+      rot:gauss(0,0.18), z: uy + (front?200:0) + rnd()*20, delay: rr(0,0.5)});
+  }
+  // a few blooms packed into the heart of the dome — without these the
+  // arrangement reads as a crescent with a hole where the centre should be
+  for(let i=0;i<ri(2,4);i++){
+    const ang=gauss(0,0.42), rad=spread*rr(0.3,0.55);
+    const base=pickCultivar();
+    const spKey=chance(.4)?hero:pick(castOthers);
+    blooms.push({spKey,
+      col:{h:base.h+gauss(0,5), s:clamp(base.s+gauss(0,5),12,92),
+           l:clamp(base.l+gauss(0,4),24,92), warm:pal.warm},
+      ux:Math.sin(ang)*rad*1.06+gauss(0,10),
+      uy:-(Math.cos(ang)*rad*0.86+96)+gauss(0,12),
+      size:rr(60,88), hideStem:true, stemJitter:0,
+      rot:gauss(0,0.2), z:-140+rnd()*60, delay:rr(0,0.45)});
+  }
+  blooms.sort((a,b)=>a.z-b.z);
+
+  // foliage & fillers, mostly behind, fanning wider than the blooms
+  const green=[];
+  // foliage frames the crown, so it has to reach past the outermost blooms
+  // foliage peeks from behind the crown to frame it — sized under the blooms,
+  // never above them, or the bouquet reads as a hedge
+  const nFern=ri(4,6);
+  for(let i=0;i<nFern;i++){
+    const u=(i/(nFern-1||1))*2-1;
+    green.push({kind:'fern', ux:u*rr(170,300), uy:-rr(150,265), len:rr(150,215),
+      rot:u*rr(0.6,1.05)+gauss(0,0.1), col:pal.foliage, z:-999+i, delay:0});
+  }
+  for(let i=0;i<ri(2,4);i++){
+    const u=(i%2?1:-1);
+    green.push({kind:'euc', ux:u*rr(160,290), uy:-rr(130,240), len:rr(150,215),
+      rot:u*rr(0.65,1.1), col:{...pal.foliage,l:pal.foliage.l+4}, z:-980+i, delay:0});
+  }
+  const breath=[];
+  const nB=ri(5,8);
+  for(let i=0;i<nB;i++){
+    const u=(i/(nB-1||1))*2-1;
+    const front=chance(.4);
+    breath.push({ux:u*rr(160,340)+gauss(0,20), uy:-rr(200,380), len:rr(26,42),
+      rot:u*rr(0.2,0.6), col:{h:(pal.base+ (pal.warm?30:180))%360, s:rr(12,30), l:rr(78,92)},
+      z: front? 900+i : -960+i, delay:rr(.2,.7)});
+  }
+
+  // metadata / placard — name each species after the colour it actually grew
+  const present=[...new Set(blooms.map(b=>b.spKey))];
+  const speciesLabel=present.map(k=>{
+      const b=blooms.find(x=>x.spKey===k);
+      return speciesName(k,b.col);
+    })
+    .concat(chance(.8)?['Gypsophila']:[], ['Fern']).slice(0,4).join('  ·  ');
+  const moods = pal.warm
+    ? (pal.vivid?['Ember','Fanfare','Vermeil','Coral Hour']:['Blush','Warm Light','Honey'])
+    : (pal.vivid?['Nocturne','Cobalt','Indigo Hour']:['Frost','Porcelain','Still Air','Pale Morning']);
+  const title=`${pick(moods)}, with ${SPECIES[hero].plural}`;
+
+  SCENE={pal,blooms,green,breath,seed:CURRENT_SEED,
+    title, speciesLabel, scheme:pal.name};
+  paintPlacard();
+}
+
+function paintPlacard(){
+  document.getElementById('pTitle').textContent=SCENE.title;
+  document.getElementById('pSpecies').textContent=SCENE.speciesLabel;
+  document.getElementById('pSeed').textContent='№ '+String(SCENE.seed).padStart(6,'0').slice(-6);
+  document.getElementById('pScheme').textContent=SCENE.scheme+' harmony';
+}
+
+/* ============================================================================
+   RENDER
+   ========================================================================== */
+function ground(){
+  const g=ctx.createRadialGradient(W*0.5,H*0.46,H*0.05, W*0.5,H*0.55,H*0.95);
+  const p=SCENE.pal.ground;
+  g.addColorStop(0,hsl(p.h,p.s,p.l+7));
+  g.addColorStop(0.5,hsl(p.h,p.s,p.l+1));
+  g.addColorStop(1,hsl(p.h,p.s+4,Math.max(3,p.l-5)));
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  // luminous halo behind the bouquet (candle-lit still-life glow)
+  const gl=ctx.createRadialGradient(W*0.5,H*0.5,10, W*0.5,H*0.5,Math.min(W,H)*0.5);
+  gl.addColorStop(0,hsl(SCENE.pal.base, 40, 60, .10));
+  gl.addColorStop(1,hsl(SCENE.pal.base,40,60,0));
+  ctx.fillStyle=gl; ctx.fillRect(0,0,W,H);
+}
+function vignette(final){
+  const g=ctx.createRadialGradient(W*0.5,H*0.5,Math.min(W,H)*0.32, W*0.5,H*0.52,Math.max(W,H)*0.72);
+  g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.5)');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  // faint film grain — only painted once on the settled frame
+  if(final){
+    ctx.globalAlpha=0.03;
+    for(let i=0;i<W*H/1600;i++){ctx.fillStyle=Math.random()<.5?'#000':'#fff';
+      ctx.fillRect(Math.random()*W,Math.random()*H,1,1);}
+    ctx.globalAlpha=1;
+  }
+}
+function stems(S,cx,tieY){
+  ctx.lineCap='round';
+  // only the outer blooms show a stem; drawing one per bloom turns the
+  // gather into a spider of thin lines
+  for(const b of SCENE.blooms){
+    if(b.hideStem) continue;
+    const x=cx+b.ux*S, y=tieY+b.uy*S;
+    const g=ctx.createLinearGradient(x,y,cx,tieY);
+    const f=SCENE.pal.foliage;
+    g.addColorStop(0,hsl(f.h,f.s,f.l+14)); g.addColorStop(1,hsl(f.h,f.s,Math.max(12,f.l-8)));
+    // taper: stems are thinner at the bloom than at the gather
+    const wide=Math.max(2, b.size*0.05*S);
+    ctx.strokeStyle=g; ctx.lineCap='round';
+    const mx=cx+b.ux*S*0.35, my=tieY+b.uy*S*0.4-20*S, ex=cx+b.stemJitter*S;
+    ctx.lineWidth=wide*0.62;
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.quadraticCurveTo(mx,my,(mx+ex)/2,(my+tieY)/2); ctx.stroke();
+    ctx.lineWidth=wide;
+    ctx.beginPath(); ctx.moveTo((mx+ex)/2,(my+tieY)/2); ctx.quadraticCurveTo(ex,tieY-8*S,ex,tieY); ctx.stroke();
+  }
+}
+function drawItem(it,S,cx,tieY,grow){
+  const x=cx+it.ux*S, y=tieY+it.uy*S;
+  ctx.save(); ctx.translate(x,y);
+  if(it.rot) ctx.rotate(it.rot);
+  ctx.scale(grow,grow);
+  if(it.kind==='fern'){ ctx.scale(S,S); fern(it.len,2,it.col); }
+  else if(it.kind==='euc'){ ctx.scale(S,S); eucalyptus(it.len,it.col); }
+  ctx.restore();
+}
+function drawBloom(b,S,cx,tieY,grow){
+  const x=cx+b.ux*S, y=tieY+b.uy*S;
+  ctx.save(); ctx.translate(x,y); ctx.rotate(b.rot); ctx.scale(grow*S,grow*S);
+  // No disc-shaped shadow or sheen here: a circle drawn behind an irregular
+  // bloom reads as a grey halo on the dark ground. Form comes from the
+  // per-petal gradient and rim light instead.
+  SPECIES[b.spKey].fn(b.size, b.col);
+  ctx.restore();
+}
+function drawBreath(sp,S,cx,tieY,grow){
+  const x=cx+sp.ux*S, y=tieY+sp.uy*S;
+  ctx.save(); ctx.translate(x,y); ctx.rotate(sp.rot); ctx.scale(grow*S,grow*S);
+  babysBreath(sp.len,4,sp.col);
+  ctx.restore();
+}
+function tie(S,cx,tieY){
+  // simple twine wrap where the stems gather
+  const f=SCENE.pal.foliage;
+  ctx.fillStyle=hsl(f.h,f.s+6,Math.max(10,f.l-10));
+  roundRect(cx-16*S,tieY-6*S,32*S,26*S,6*S); ctx.fill();
+  ctx.strokeStyle=hsl(35,30,52,.8); ctx.lineWidth=2.4*S;
+  for(let i=0;i<4;i++){ctx.beginPath();ctx.moveTo(cx-16*S,tieY+(i*6-2)*S);
+    ctx.quadraticCurveTo(cx,tieY+(i*6-4)*S,cx+16*S,tieY+(i*6-2)*S);ctx.stroke();}
+}
+
+let START=null, RAF=null;
+const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+function layout(){
+  const portrait = H > W;
+  // portrait screens need the lower band for the placard, so lift the tie point
+  return { S: Math.min(W,H)/780 * (portrait?1.12:1),
+           cx: W*0.5,
+           tieY: H*(portrait?0.8:0.9) };
+}
+function render(now){
+  const {S,cx,tieY}=layout();
+  if(START==null)START=now;
+  // Petal curl, fern leaflets and floret packing all draw with rr()/gauss().
+  // Re-seed every frame so the same bouquet is drawn identically each time —
+  // otherwise the geometry reshuffles on each frame and the bloom shimmers.
+  RNG = mulberry32((CURRENT_SEED ^ 0x9e3779b9)>>>0);
+  const t=reduce?1:clamp((now-START)/1900,0,1);
+
+  ground();
+  stems(S,cx,tieY);
+
+  // back foliage
+  for(const it of SCENE.green) if(it.z<0) drawItem(it,S,cx,tieY,eased(t,it.delay));
+  for(const sp of SCENE.breath) if(sp.z<0) drawBreath(sp,S,cx,tieY,eased(t,sp.delay));
+
+  // blooms back→front
+  for(const b of SCENE.blooms) drawBloom(b,S,cx,tieY,eased(t,b.delay,true));
+
+  // front fillers
+  for(const sp of SCENE.breath) if(sp.z>0) drawBreath(sp,S,cx,tieY,eased(t,sp.delay));
+
+  tie(S,cx,tieY);
+  vignette(t>=1);
+
+  if(t<1) RAF=requestAnimationFrame(render); else RAF=null;
+}
+function eased(t,delay,back){
+  const d=clamp((t-delay)/(1-delay*0.6),0,1);
+  return back? Math.max(0.001, easeOutBack(d)) : easeOut(d);
+}
+
+/* ============================================================================
+   BOOT / EVENTS
+   ========================================================================== */
+let CURRENT_SEED=0;
+function resize(){
+  DPR=Math.min(devicePixelRatio||1,2);
+  // guard against a zero-sized viewport (hidden/embedded frame): never build a 0px canvas
+  W=Math.max(1, innerWidth||document.documentElement.clientWidth||0);
+  H=Math.max(1, innerHeight||document.documentElement.clientHeight||0);
+  canvas.width=Math.round(W*DPR); canvas.height=Math.round(H*DPR);
+  canvas.style.width=W+'px'; canvas.style.height=H+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+function repaint(){
+  START=null; if(RAF)cancelAnimationFrame(RAF);
+  RAF=requestAnimationFrame(render);
+  clearTimeout(WATCHDOG);
+  WATCHDOG=setTimeout(()=>{ if(RAF){cancelAnimationFrame(RAF);RAF=null;} START=-1e9; render(performance.now()); },2400);
+}
+// re-render once the frame actually has a size (pane revealed, tab shown, rotate)
+let lastW=0,lastH=0;
+function onGeometry(){
+  const w=innerWidth||document.documentElement.clientWidth||0;
+  const h=innerHeight||document.documentElement.clientHeight||0;
+  if(w<1||h<1) return;
+  if(Math.abs(w-lastW)<2 && Math.abs(h-lastH)<2) return;
+  lastW=w; lastH=h; resize(); if(SCENE) repaint();
+}
+function newSeed(){ return (Math.floor(Math.random()*1e9))>>>0; }
+let WATCHDOG=null;
+function start(seed){
+  CURRENT_SEED = seed>>>0;
+  location.hash = 's='+CURRENT_SEED;
+  RNG = mulberry32(CURRENT_SEED);
+  buildScene();
+  repaint();   // paints, and force-settles if RAF is throttled
+}
+function regen(){ start(newSeed()); }
+
+addEventListener('resize',onGeometry);
+addEventListener('visibilitychange',()=>{ if(!document.hidden) onGeometry(); });
+if(window.ResizeObserver) new ResizeObserver(onGeometry).observe(document.documentElement);
+document.getElementById('regen').addEventListener('click',regen);
+document.getElementById('save').addEventListener('click',()=>{
+  const a=document.createElement('a');
+  a.download='still-life-'+String(CURRENT_SEED)+'.png';
+  a.href=canvas.toDataURL('image/png'); a.click();
+});
+addEventListener('keydown',e=>{
+  if(e.code==='Space'){e.preventDefault();regen();}
+  else if(e.key==='s'||e.key==='S'){document.getElementById('save').click();}
+});
+
+resize();
+lastW=W; lastH=H;
+const fromHash=(location.hash.match(/s=(\d+)/)||[])[1];
+start(fromHash?parseInt(fromHash,10):newSeed());
+</script>
