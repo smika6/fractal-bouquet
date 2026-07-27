@@ -114,6 +114,24 @@
     text-transform:uppercase; color:var(--muted); margin-bottom:7px}
   input[type=range]{width:100%; accent-color:var(--accent); background:transparent}
   .empty{font-family:var(--sans); font-size:11.5px; color:var(--muted); line-height:1.6; margin:0}
+  .count{font-family:var(--sans); font-size:9.5px; letter-spacing:.14em; color:var(--muted); margin-left:.5em}
+  .layers{
+    display:flex; flex-direction:column; gap:3px; max-height:206px; overflow-y:auto;
+    padding-right:3px; margin-bottom:9px;
+  }
+  .layer{
+    display:flex; align-items:center; gap:9px; width:100%; text-align:left;
+    padding:6px 9px; border-radius:7px; border:1px solid transparent;
+    background:rgba(255,250,240,.04); text-transform:none; letter-spacing:.01em;
+    font-size:11.5px; color:var(--muted); backdrop-filter:none;
+  }
+  .layer:hover{background:rgba(201,162,75,.12); color:var(--ink); border-color:transparent; transform:none}
+  .layer.on{border-color:var(--accent); background:rgba(201,162,75,.18); color:var(--ink)}
+  .layer i{width:11px; height:11px; border-radius:50%; flex:0 0 auto;
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.4)}
+  .layer span{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .layer em{font-style:normal; font-size:9.5px; color:var(--muted); font-variant-numeric:tabular-nums}
+  #selKind{color:var(--muted); text-transform:none; letter-spacing:.04em; font-size:10px}
   .studio footer{margin-top:auto; padding-top:14px; border-top:1px solid var(--line)}
 
   .hint{
@@ -177,9 +195,15 @@
   </section>
 
   <section>
+    <h2>Add greenery</h2>
+    <div class="grid" id="greenGrid"></div>
+    <p class="note">Fronds and sprigs are gathered into the vase like everything else — drag them, turn them, and layer them among the flowers.</p>
+  </section>
+
+  <section>
     <h2>Colour</h2>
     <div class="swatches" id="swatches"></div>
-    <p class="note" id="colourNote">Picks the colour for the next flower you add.</p>
+    <p class="note" id="colourNote">Sets the colour for the next flower you add, or recolours the selected one. Foliage keeps its own green.</p>
   </section>
 
   <section>
@@ -188,21 +212,31 @@
   </section>
 
   <section id="selPanel">
-    <h2>Selected flower</h2>
+    <h2>Selected <span id="selKind"></span></h2>
     <div id="selBody">
-      <p class="empty" id="selEmpty">Nothing selected. Click a flower on the canvas to move, turn or remove it.</p>
+      <p class="empty" id="selEmpty">Nothing selected. Click anything in the vase — flower, frond or sprig — to move, turn or remove it.</p>
       <div id="selControls" hidden>
         <label class="slider" for="selSize">Size</label>
         <input type="range" id="selSize" min="40" max="150" step="1">
         <label class="slider" for="selTurn" style="margin-top:12px">Turn</label>
         <input type="range" id="selTurn" min="-180" max="180" step="1">
         <div class="row" style="margin-top:12px">
-          <button id="selBack" title="Send behind">Back</button>
-          <button id="selFront" title="Bring in front">Front</button>
+          <button id="selBack" title="One layer back">Back</button>
+          <button id="selFront" title="One layer forward">Front</button>
           <button id="selDelete" title="Remove (Del)">Remove</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button id="selToBack" title="Send to the very back">To back</button>
+          <button id="selToFront" title="Bring to the very front">To front</button>
         </div>
       </div>
     </div>
+  </section>
+
+  <section>
+    <h2>Layers <span id="layerCount" class="count"></span></h2>
+    <div class="layers" id="layerList"></div>
+    <p class="note">Front of the arrangement at the top. Click a layer to select it.</p>
   </section>
 
   <footer>
@@ -599,17 +633,20 @@ function fern(len,depth,col){
   if(depth<=0||len<8)return;
   ctx.strokeStyle=hsl(col.h,col.s,col.l); ctx.lineWidth=Math.max(.6,len*0.02); ctx.lineCap='round';
   ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(len*0.06,-len*0.5,0,-len); ctx.stroke();
-  const pairs=Math.min(11,Math.max(4,Math.floor(len/24)));
+  const pairs=Math.min(13,Math.max(5,Math.floor(len/26)));
   for(let i=1;i<=pairs;i++){
-    const t=i/(pairs+1), y=-len*t, sub=len*(1-t)*0.5;
+    const t=i/(pairs+1), y=-len*t, sub=len*(1-t)*0.48;
     for(const s of [-1,1]){
       ctx.save(); ctx.translate(0,y); ctx.rotate(s*(0.85-t*0.25));
-      if(depth>1 && sub>22) fern(sub, depth-1, {h:col.h,s:col.s,l:Math.min(col.l+i*0.5,col.l+4)});
+      if(depth>1 && sub>26) fern(sub, depth-1, {h:col.h,s:col.s,l:Math.min(col.l+i*0.5,col.l+4)});
       else leafBlade(sub, sub*0.34, {h:col.h,s:col.s+4,l:Math.min(col.l+4,31)});
       ctx.restore();
     }
   }
-  ctx.save(); ctx.translate(0,-len); leafBlade(len*0.28,len*0.1,{h:col.h,s:col.s+4,l:Math.min(col.l+4,31)}); ctx.restore();
+  // terminal leaflet stays small — scaled to the frond it would read as a
+  // single giant leaf floating above the arrangement
+  ctx.save(); ctx.translate(0,-len);
+  leafBlade(len*0.15,len*0.05,{h:col.h,s:col.s+4,l:Math.min(col.l+4,31)}); ctx.restore();
 }
 // recursive binary branching, a floret at every tip
 function babysBreath(len,depth,col){
@@ -802,11 +839,39 @@ const SPREAD=395;   // unit half-width of the crown
 const LIFT=34;      // how far the lowest blooms clear the rim — small, so the
                     // arrangement sits into the vessel rather than hovering over it
 
-function makeBloom(spKey,col,ux,uy,size,rot,extra){
-  return Object.assign({
-    spKey, col:{h:col.h,s:col.s,l:col.l,warm:col.warm??false},
-    ux, uy, size, rot, seed:newSeed(), delay:0, hideStem:false, stemJitter:0
-  }, extra||{});
+/* Every stem in the vase — flower, frond, sprig — is the same kind of object.
+   Foliage used to be a separate list with no stem, which is why it floated
+   away from the bouquet instead of belonging to it. One list also means one
+   draw order, so array position IS layer position. */
+const KINDS=['bloom','fern','euc','breath'];
+const KIND_INFO={
+  bloom : {label:'Flower',     min:40,  max:150, tinted:true },
+  fern  : {label:'Fern',       min:120, max:520, tinted:false},
+  euc   : {label:'Eucalyptus', min:120, max:480, tinted:false},
+  breath: {label:"Baby's breath", min:26, max:130, tinted:true },
+};
+function makeItem(kind,opts){
+  const o=opts||{};
+  return {
+    kind,
+    spKey:o.spKey||null,
+    col:{h:o.col?.h??0, s:o.col?.s??0, l:o.col?.l??0, warm:o.col?.warm??false},
+    ux:o.ux??0, uy:o.uy??0, size:o.size??80, rot:o.rot??0,
+    seed:o.seed??newSeed(), delay:o.delay??0,
+    hideStem:o.hideStem??false, stemJitter:o.stemJitter??0,
+  };
+}
+// where an item visually sits, and how big a target it is: fronds and sprays
+// grow up and away from their anchor, so their centre is not their anchor
+function itemGeom(it,S,cx,mouthY){
+  const ax=cx+it.ux*S, ay=mouthY+it.uy*S, L=it.size*S;
+  if(it.kind==='bloom') return {x:ax,y:ay,r:Math.max(14,L*0.86)};
+  const reach = it.kind==='breath' ? L*1.15 : L*0.5;   // breath branches ~2.4x its stem
+  return {
+    x: ax+Math.sin(it.rot)*reach,
+    y: ay-Math.cos(it.rot)*reach,
+    r: Math.max(20, reach*(it.kind==='breath'?1.0:1.1)),
+  };
 }
 function buildScene(seed,opts){
   opts=opts||{};
@@ -822,8 +887,33 @@ function buildScene(seed,opts){
   const dominant=pal.cultivars[0];
   const pickCultivar=()=> chance(.62) ? dominant : pick(pal.cultivars.slice(1));
 
-  const blooms=[];
+  // Foliage anchors low and near the vase so its stem reads as gathered with
+  // the rest; the frond itself does the reaching outward.
+  const back=[], mid=[], front=[];
   if(!opts.empty){
+    // Foliage anchors low so its stem reads as gathered, but has to be long
+    // enough to break past the crown — otherwise it just hides behind the
+    // flowers. The frond does the reaching, not the anchor.
+    const nFern=ri(5,7);
+    for(let i=0;i<nFern;i++){
+      const u=(i/(nFern-1||1))*2-1;
+      const outward=Math.abs(u);
+      back.push(makeItem('fern',{
+        col:pal.foliage,
+        ux:u*rr(40,110), uy:-rr(50,130),
+        size:lerp(rr(380,450), rr(300,360), outward),   // tallest through the middle
+        rot:u*rr(0.8,1.3)+gauss(0,0.08),
+        stemJitter:gauss(0,5), delay:rr(0,.25)}));
+    }
+    for(let i=0;i<ri(3,5);i++){
+      const u=(i%2?1:-1);
+      back.push(makeItem('euc',{
+        col:{...pal.foliage,l:pal.foliage.l+4},
+        ux:u*rr(35,105), uy:-rr(45,120), size:rr(300,390),
+        rot:u*rr(0.85,1.35)+gauss(0,0.08),
+        stemJitter:gauss(0,5), delay:rr(0,.25)}));
+    }
+
     const N=ri(15,20);
     for(let i=0;i<N;i++){
       const u=(i/(N-1))*2-1;
@@ -831,64 +921,69 @@ function buildScene(seed,opts){
       const rad=lerp(0.42,1,rnd())*SPREAD;
       const ux=Math.sin(ang)*rad*1.06+gauss(0,12);
       const uy=-(Math.cos(ang)*rad*0.86+LIFT)+gauss(0,14);
-      const front=uy>-SPREAD*0.66;
+      const isFront=uy>-SPREAD*0.66;
       const spKey=i===0?hero:(chance(.34)?hero:pick(others));
       const b=pickCultivar();
-      blooms.push(makeBloom(spKey,
-        floralColour(b.h+gauss(0,5), b.s+gauss(0,5), b.l+gauss(0,4), pal.warm),
-        ux, uy, (spKey===hero?rr(88,116):rr(62,96))*(front?1.06:0.9), gauss(0,0.18),
-        {hideStem:Math.abs(ux)<SPREAD*0.34&&chance(.75), stemJitter:gauss(0,6),
-         z:uy+(front?200:0)+rnd()*20, delay:rr(0,0.5)}));
+      mid.push(makeItem('bloom',{spKey,
+        col:floralColour(b.h+gauss(0,5), b.s+gauss(0,5), b.l+gauss(0,4), pal.warm),
+        ux, uy, size:(spKey===hero?rr(88,116):rr(62,96))*(isFront?1.06:0.9),
+        rot:gauss(0,0.18),
+        hideStem:Math.abs(ux)<SPREAD*0.34&&chance(.75), stemJitter:gauss(0,6),
+        z:uy+(isFront?200:0)+rnd()*20, delay:rr(0,0.5)}));
     }
     // heart of the dome — without these it reads as a crescent with a hole
     for(let i=0;i<ri(3,5);i++){
       const ang=gauss(0,0.42), rad=SPREAD*rr(0.28,0.55);
       const b=pickCultivar();
-      blooms.push(makeBloom(chance(.4)?hero:pick(others),
-        floralColour(b.h+gauss(0,5), b.s+gauss(0,5), b.l+gauss(0,4), pal.warm),
-        Math.sin(ang)*rad*1.06+gauss(0,10), -(Math.cos(ang)*rad*0.86+LIFT)+gauss(0,12),
-        rr(62,90), gauss(0,0.2),
-        {hideStem:true, z:-140+rnd()*60, delay:rr(0,0.45)}));
+      mid.push(makeItem('bloom',{spKey:chance(.4)?hero:pick(others),
+        col:floralColour(b.h+gauss(0,5), b.s+gauss(0,5), b.l+gauss(0,4), pal.warm),
+        ux:Math.sin(ang)*rad*1.06+gauss(0,10),
+        uy:-(Math.cos(ang)*rad*0.86+LIFT)+gauss(0,12),
+        size:rr(62,90), rot:gauss(0,0.2),
+        hideStem:true, z:-140+rnd()*60, delay:rr(0,0.45)}));
     }
-    blooms.sort((a,b)=>a.z-b.z);   // array order is draw order from here on
+    mid.sort((a,b)=>a.z-b.z);
+
+    const breathCol={h:(pal.base+(pal.warm?30:180))%360, s:rr(10,26), l:rr(80,93)};
+    const nB=ri(8,11);
+    for(let i=0;i<nB;i++){
+      const u=(i/(nB-1||1))*2-1;
+      const sprig=makeItem('breath',{
+        col:{...breathCol, s:breathCol.s+gauss(0,4), l:clamp(breathCol.l+gauss(0,3),72,96)},
+        ux:u*rr(70,210)+gauss(0,18), uy:-rr(90,240), size:rr(52,84),
+        rot:u*rr(0.25,0.72)+gauss(0,0.1),
+        stemJitter:gauss(0,6), delay:rr(.2,.7)});
+      (chance(.4)?front:back).push(sprig);
+    }
   }
 
-  const green=[], breath=[];
-  const nFern=ri(5,7);
-  for(let i=0;i<nFern;i++){
-    const u=(i/(nFern-1||1))*2-1;
-    green.push({kind:'fern', ux:u*rr(185,335), uy:-rr(155,285), len:rr(160,235),
-      rot:u*rr(0.6,1.05)+gauss(0,0.1), col:pal.foliage, seed:newSeed()});
-  }
-  for(let i=0;i<ri(3,5);i++){
-    const u=(i%2?1:-1);
-    green.push({kind:'euc', ux:u*rr(175,315), uy:-rr(135,255), len:rr(160,230),
-      rot:u*rr(0.65,1.1), col:{...pal.foliage,l:pal.foliage.l+4}, seed:newSeed()});
-  }
-  const nB=ri(7,10);
-  for(let i=0;i<nB;i++){
-    const u=(i/(nB-1||1))*2-1;
-    breath.push({ux:u*rr(180,375)+gauss(0,20), uy:-rr(215,400), len:rr(28,44),
-      rot:u*rr(0.2,0.6), col:{h:(pal.base+(pal.warm?30:180))%360, s:rr(12,30), l:rr(78,92)},
-      front:chance(.4), seed:newSeed(), delay:rr(.2,.7)});
-  }
-
-  SCENE={pal, blooms, green, breath, vase, seed:seed>>>0, scheme:pal.name, hero};
+  // array order is draw order, back to front — this is the layer stack
+  const items=[...back.filter(x=>x.kind!=='breath'), ...back.filter(x=>x.kind==='breath'),
+               ...mid, ...front];
+  SCENE={pal, items, vase, seed:seed>>>0, scheme:pal.name, hero};
   SELECTED=-1;
   refreshPlacard();
 }
+const blooms=()=>SCENE.items.filter(i=>i.kind==='bloom');
 
 function refreshPlacard(){
-  const bl=SCENE.blooms;
+  const bl=blooms();
   const present=[...new Set(bl.map(b=>b.spKey))];
   const names=present.map(k=>speciesName(k, bl.find(x=>x.spKey===k).col));
+  // only credit the greenery that is actually in the vase
+  const extras=[];
+  if(SCENE.items.some(i=>i.kind==='breath')) extras.push('Gypsophila');
+  if(SCENE.items.some(i=>i.kind==='fern'))   extras.push('Fern');
+  if(SCENE.items.some(i=>i.kind==='euc'))    extras.push('Eucalyptus');
   const label = names.length
-    ? names.concat(['Gypsophila','Fern']).slice(0,4).join('  ·  ')
-    : 'An empty vessel, waiting';
+    ? names.concat(extras).slice(0,4).join('  ·  ')
+    : (extras.length ? extras.join('  ·  ') : 'An empty vessel, waiting');
   const vaseName=VASES[SCENE.vase].label.toLowerCase();
   let title;
   if(!bl.length){
-    title=`Still Life with an Empty ${VASES[SCENE.vase].label}`;
+    title = SCENE.items.length
+      ? `Foliage in a ${VASES[SCENE.vase].label}`
+      : `Still Life with an Empty ${VASES[SCENE.vase].label}`;
   }else{
     // whichever species actually dominates leads the title
     const tally={}; for(const b of bl) tally[b.spKey]=(tally[b.spKey]||0)+1;
@@ -901,7 +996,7 @@ function refreshPlacard(){
   }
   document.getElementById('pTitle').textContent=title;
   document.getElementById('pSpecies').textContent =
-    bl.length ? label+'  ·  in a '+vaseName : label;
+    SCENE.items.length ? label+'  ·  in a '+vaseName : label;
   document.getElementById('pSeed').textContent='№ '+String(SCENE.seed).padStart(6,'0').slice(-6);
   document.getElementById('pScheme').textContent=SCENE.scheme+' harmony';
 }
@@ -947,6 +1042,12 @@ function vignette(final){
     ctx.globalAlpha=1;
   }
 }
+// stem thickness by what it has to carry
+function stemWidth(it,S){
+  if(it.kind==='bloom')  return Math.max(2,   it.size*0.05*S);
+  if(it.kind==='breath') return Math.max(1.1, it.size*0.026*S);
+  return Math.max(1.6, it.size*0.021*S);
+}
 function stems(S,cx,mouthY){
   const f=SCENE.pal.foliage;
   const v=VASES[SCENE.vase];
@@ -956,27 +1057,30 @@ function stems(S,cx,mouthY){
   if(v.glass && v.h){
     ctx.save(); ctx.globalAlpha=0.7;
     const deep=v.h*0.82*S;
-    for(const b of SCENE.blooms){
-      if(b.hideStem) continue;
-      const ex=cx+(b.stemJitter||0)*S;
+    for(const it of SCENE.items){
+      if(it.hideStem) continue;
+      const ex=cx+(it.stemJitter||0)*S;
       const g=ctx.createLinearGradient(0,mouthY,0,mouthY+deep);
       g.addColorStop(0,hsl(f.h,f.s,Math.max(12,f.l-4)));
       g.addColorStop(1,hsl(f.h,f.s-6,Math.max(9,f.l-14)));
-      ctx.strokeStyle=g; ctx.lineWidth=Math.max(2,b.size*0.05*S);
+      ctx.strokeStyle=g; ctx.lineWidth=stemWidth(it,S);
       ctx.beginPath(); ctx.moveTo(ex,mouthY);
       ctx.quadraticCurveTo(ex*0.55+cx*0.45,mouthY+deep*0.6,
-                           cx+(b.stemJitter||0)*S*0.3,mouthY+deep);
+                           cx+(it.stemJitter||0)*S*0.3,mouthY+deep);
       ctx.stroke();
     }
     ctx.restore();
   }
-  for(const b of SCENE.blooms){
-    if(b.hideStem) continue;
-    const x=cx+b.ux*S, y=mouthY+b.uy*S;
+  // Every item is gathered into the vessel — foliage and gypsophila included.
+  // Without this the greenery floats beside the bouquet instead of in it.
+  for(const it of SCENE.items){
+    if(it.hideStem) continue;
+    const x=cx+it.ux*S, y=mouthY+it.uy*S;
     const g=ctx.createLinearGradient(x,y,cx,mouthY);
-    g.addColorStop(0,hsl(f.h,f.s,f.l+14)); g.addColorStop(1,hsl(f.h,f.s,Math.max(12,f.l-8)));
-    const wide=Math.max(2,b.size*0.05*S);
-    const mx=cx+b.ux*S*0.35, my=mouthY+b.uy*S*0.4-20*S, ex=cx+(b.stemJitter||0)*S;
+    const tint = it.kind==='breath' ? 6 : 14;
+    g.addColorStop(0,hsl(f.h,f.s,f.l+tint)); g.addColorStop(1,hsl(f.h,f.s,Math.max(12,f.l-8)));
+    const wide=stemWidth(it,S);
+    const mx=cx+it.ux*S*0.35, my=mouthY+it.uy*S*0.4-20*S, ex=cx+(it.stemJitter||0)*S;
     ctx.strokeStyle=g;
     ctx.lineWidth=wide*0.62;
     ctx.beginPath(); ctx.moveTo(x,y); ctx.quadraticCurveTo(mx,my,(mx+ex)/2,(my+mouthY)/2); ctx.stroke();
@@ -985,25 +1089,73 @@ function stems(S,cx,mouthY){
     ctx.quadraticCurveTo(ex,mouthY-8*S,ex,mouthY+18*S); ctx.stroke();
   }
 }
-function drawBloom(b,S,cx,mouthY,grow){
+/* A bipinnate frond is thousands of leaf blades, and it only changes when it
+   is edited — so bake each one once and blit it thereafter. This is what keeps
+   dragging responsive as the arrangement fills up. */
+const SPRITES=new Map();
+function foliageSprite(it){
+  const q=1.5;                                   // sprite resolution, px per unit
+  const size=Math.max(8,Math.round(it.size/4)*4);
+  const key=`${it.kind}|${it.seed>>>0}|${size}|${Math.round(it.col.h)},${Math.round(it.col.s)},${Math.round(it.col.l)}`;
+  const hit=SPRITES.get(key);
+  if(hit){ SPRITES.delete(key); SPRITES.set(key,hit); return hit; }   // keep recent
+  const padX=0.78*size, padTop=1.22*size, padBot=0.16*size;
+  const c=document.createElement('canvas');
+  c.width =Math.max(2,Math.ceil(2*padX*q));
+  c.height=Math.max(2,Math.ceil((padTop+padBot)*q));
+  const o=c.getContext('2d');
+  o.setTransform(q,0,0,q,padX*q,padTop*q);
+  const prevRNG=RNG; RNG=mulberry32(it.seed>>>0);
+  const real=swapCtx(o);
+  if(it.kind==='fern') fern(size,2,it.col); else eucalyptus(size,it.col);
+  swapCtx(real); RNG=prevRNG;
+  // A quarter-resolution alpha mask, so clicking a frond only catches where
+  // leaves actually are. A bounding circle would swallow every click in the
+  // large empty gaps between leaflets.
+  const img=o.getImageData(0,0,c.width,c.height).data;
+  const mw=Math.ceil(c.width/4), mh=Math.ceil(c.height/4);
+  const mask=new Uint8Array(mw*mh);
+  for(let y=0;y<c.height;y+=2){
+    const row=(y>>2)*mw, base=y*c.width;
+    for(let x=0;x<c.width;x+=2)
+      if(img[(base+x)*4+3]>24) mask[row+(x>>2)]=1;
+  }
+  const sp={canvas:c,q,padX,padTop,w:c.width,h:c.height,mask,mw,mh};
+  SPRITES.set(key,sp);
+  if(SPRITES.size>56) SPRITES.delete(SPRITES.keys().next().value);
+  return sp;
+}
+function drawItem(it,S,cx,mouthY,grow){
   ctx.save();
-  ctx.translate(cx+b.ux*S, mouthY+b.uy*S);
-  ctx.rotate(b.rot); ctx.scale(grow*S,grow*S);
-  // each bloom draws from its own seed, so editing one never reshuffles another
-  RNG=mulberry32(b.seed>>>0);
-  SPECIES[b.spKey].fn(b.size,b.col);
+  ctx.translate(cx+it.ux*S, mouthY+it.uy*S);
+  ctx.rotate(it.rot);
+  // each item draws from its own seed, so editing one never reshuffles another
+  RNG=mulberry32(it.seed>>>0);
+  if(it.kind==='fern'||it.kind==='euc'){
+    const sp=foliageSprite(it), k=grow*S;
+    ctx.drawImage(sp.canvas, -sp.padX*k, -sp.padTop*k, (sp.w/sp.q)*k, (sp.h/sp.q)*k);
+  }else{
+    ctx.scale(grow*S,grow*S);
+    if(it.kind==='bloom') SPECIES[it.spKey].fn(it.size,it.col);
+    else                  babysBreath(it.size,4,it.col);
+  }
   ctx.restore();
 }
 function selectionOverlay(S,cx,mouthY){
   if(SELECTED<0||!ARRANGING) return;
-  const b=SCENE.blooms[SELECTED]; if(!b) return;
-  const x=cx+b.ux*S, y=mouthY+b.uy*S, r=b.size*S*0.92;
+  const it=SCENE.items[SELECTED]; if(!it) return;
+  const {x,y,r}=itemGeom(it,S,cx,mouthY);
+  const ax=cx+it.ux*S, ay=mouthY+it.uy*S;
   ctx.save();
   ctx.strokeStyle='rgba(201,162,75,.9)'; ctx.lineWidth=1.6; ctx.setLineDash([5,5]);
   ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.stroke();
   ctx.setLineDash([]);
-  // rotation grip, carried around with the bloom
-  const hx=x+Math.sin(b.rot)*(r+22), hy=y-Math.cos(b.rot)*(r+22);
+  // where the stem meets the item, so it is clear what is being moved
+  if(it.kind!=='bloom'){
+    ctx.fillStyle='rgba(201,162,75,.5)'; dot(ax,ay,3.5);
+  }
+  // rotation grip, carried around with the item
+  const hx=x+Math.sin(it.rot)*(r+22), hy=y-Math.cos(it.rot)*(r+22);
   ctx.strokeStyle='rgba(201,162,75,.55)'; ctx.lineWidth=1.4;
   ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(hx,hy); ctx.stroke();
   ctx.fillStyle='#c9a24b'; dot(hx,hy,8);
@@ -1028,29 +1180,11 @@ function render(now){
   const t=(ARRANGING||reduceMotion)?1:clamp((now-START)/1900,0,1);
 
   ground();
+  drawVesselBack(SCENE.vase,S,cx,mouthY);
   stems(S,cx,mouthY);
-  for(const it of SCENE.green){
-    RNG=mulberry32(it.seed>>>0);
-    ctx.save(); ctx.translate(cx+it.ux*S, mouthY+it.uy*S);
-    ctx.rotate(it.rot); ctx.scale(eased(t,0)*S,eased(t,0)*S);
-    if(it.kind==='fern') fern(it.len,2,it.col); else eucalyptus(it.len,it.col);
-    ctx.restore();
-  }
-  for(const sp of SCENE.breath){
-    if(sp.front) continue;
-    RNG=mulberry32(sp.seed>>>0);
-    ctx.save(); ctx.translate(cx+sp.ux*S,mouthY+sp.uy*S);
-    ctx.rotate(sp.rot); const gsc=eased(t,sp.delay)*S; ctx.scale(gsc,gsc);
-    babysBreath(sp.len,4,sp.col); ctx.restore();
-  }
-  for(const b of SCENE.blooms) drawBloom(b,S,cx,mouthY,eased(t,b.delay||0,true));
-  for(const sp of SCENE.breath){
-    if(!sp.front) continue;
-    RNG=mulberry32(sp.seed>>>0);
-    ctx.save(); ctx.translate(cx+sp.ux*S,mouthY+sp.uy*S);
-    ctx.rotate(sp.rot); const gsc=eased(t,sp.delay)*S; ctx.scale(gsc,gsc);
-    babysBreath(sp.len,4,sp.col); ctx.restore();
-  }
+  // one pass, in layer order — flowers and greenery share the same stack
+  for(const it of SCENE.items)
+    drawItem(it,S,cx,mouthY,eased(t,it.delay||0,it.kind==='bloom'));
   drawVase(SCENE.vase,S,cx,mouthY);
   vignette(t>=1 && !ARRANGING);
   selectionOverlay(S,cx,mouthY);
@@ -1073,21 +1207,35 @@ function paintNow(){                       // one repaint per frame while draggi
 /* ============================================================================
    INTERACTION — pick, drag, turn
    ========================================================================== */
+function itemHitTest(it,S,cx,mouthY,px,py){
+  const g=itemGeom(it,S,cx,mouthY);
+  const dx=px-g.x, dy=py-g.y;
+  if(dx*dx+dy*dy > g.r*g.r) return false;          // cheap reject
+  if(it.kind!=='fern' && it.kind!=='euc') return true;
+  const sp=foliageSprite(it);
+  if(!sp.mask) return true;
+  // into the frond's own unrotated space, then into mask pixels
+  const ax=px-(cx+it.ux*S), ay=py-(mouthY+it.uy*S);
+  const c=Math.cos(it.rot), s=Math.sin(it.rot);
+  const rx=( ax*c + ay*s)/S + sp.padX;
+  const ry=(-ax*s + ay*c)/S + sp.padTop;
+  const mx=(rx*sp.q)>>2, my=(ry*sp.q)>>2;
+  if(mx<0||my<0||mx>=sp.mw||my>=sp.mh) return false;
+  return sp.mask[my*sp.mw+mx]===1;
+}
 function bloomAt(px,py){
   const {S,cx,mouthY}=layout();
-  for(let i=SCENE.blooms.length-1;i>=0;i--){     // topmost first
-    const b=SCENE.blooms[i];
-    const dx=px-(cx+b.ux*S), dy=py-(mouthY+b.uy*S);
-    if(dx*dx+dy*dy <= Math.pow(b.size*S*0.86,2)) return i;
-  }
+  // topmost first, so clicking picks what you can actually see
+  for(let i=SCENE.items.length-1;i>=0;i--)
+    if(itemHitTest(SCENE.items[i],S,cx,mouthY,px,py)) return i;
   return -1;
 }
 function gripAt(px,py){
   if(SELECTED<0) return false;
   const {S,cx,mouthY}=layout();
-  const b=SCENE.blooms[SELECTED]; if(!b) return false;
-  const x=cx+b.ux*S, y=mouthY+b.uy*S, r=b.size*S*0.92;
-  const hx=x+Math.sin(b.rot)*(r+22), hy=y-Math.cos(b.rot)*(r+22);
+  const it=SCENE.items[SELECTED]; if(!it) return false;
+  const g=itemGeom(it,S,cx,mouthY);
+  const hx=g.x+Math.sin(it.rot)*(g.r+22), hy=g.y-Math.cos(it.rot)*(g.r+22);
   return Math.hypot(px-hx,py-hy)<=15;
 }
 let drag=null;
@@ -1102,11 +1250,12 @@ canvas.addEventListener('pointerdown',e=>{
   syncSelectionUI();
   if(hit>=0){
     const {S,cx,mouthY}=layout();
-    const b=SCENE.blooms[hit];
-    drag={mode:'move', dx:px-(cx+b.ux*S), dy:py-(mouthY+b.uy*S)};
+    const it=SCENE.items[hit];
+    drag={mode:'move', dx:px-(cx+it.ux*S), dy:py-(mouthY+it.uy*S)};
     canvas.setPointerCapture(e.pointerId);
     canvas.style.cursor='grabbing';
-  }
+    refreshLayerList();
+  }else refreshLayerList();
   paintNow();
   e.preventDefault();
 });
@@ -1118,14 +1267,18 @@ canvas.addEventListener('pointermove',e=>{
     return;
   }
   const {S,cx,mouthY}=layout();
-  const b=SCENE.blooms[SELECTED]; if(!b) return;
+  const it=SCENE.items[SELECTED]; if(!it) return;
   if(drag.mode==='move'){
-    b.ux=(px-drag.dx-cx)/S;
-    b.uy=(py-drag.dy-mouthY)/S;
+    it.ux=(px-drag.dx-cx)/S;
+    it.uy=(py-drag.dy-mouthY)/S;
   }else{
-    b.rot=Math.atan2(py-(mouthY+b.uy*S), px-(cx+b.ux*S))+Math.PI/2;
+    // turn about the item's visual centre, not its stem anchor
+    const g=itemGeom(it,S,cx,mouthY);
+    const ax=cx+it.ux*S, ay=mouthY+it.uy*S;
+    const pivotX = it.kind==='bloom' ? ax : g.x, pivotY = it.kind==='bloom' ? ay : g.y;
+    it.rot=Math.atan2(py-pivotY, px-pivotX)+Math.PI/2;
     const turn=document.getElementById('selTurn');
-    turn.value=Math.round(((b.rot*180/Math.PI+180)%360+360)%360-180);
+    turn.value=Math.round(((it.rot*180/Math.PI+180)%360+360)%360-180);
   }
   paintNow();
 });
@@ -1212,6 +1365,37 @@ function buildFlowerGrid(){
     grid.appendChild(btn);
   }
 }
+// greenery thumbnail, drawn with the same painters used on the canvas
+function thumbGreen(kind,size){
+  const c=document.createElement('canvas');
+  c.width=c.height=size*2; c.style.width=c.style.height=size+'px';
+  const o=c.getContext('2d');
+  o.scale(2,2); o.translate(size/2, size*0.94);
+  const prev=RNG; RNG=mulberry32(kind==='breath'?7:21);
+  const real=swapCtx(o);
+  const green={h:126,s:30,l:28};
+  if(kind==='fern')        fern(size*0.8,2,green);
+  else if(kind==='euc')    eucalyptus(size*0.8,{...green,l:32});
+  else                     babysBreath(size*0.3,4,{h:44,s:14,l:88});
+  swapCtx(real); RNG=prev;
+  return c;
+}
+function buildGreenGrid(){
+  const grid=document.getElementById('greenGrid');
+  if(!grid) return;
+  grid.textContent='';
+  for(const kind of ['fern','euc','breath']){
+    const btn=document.createElement('button');
+    btn.className='tile'; btn.type='button';
+    btn.title='Add '+KIND_INFO[kind].label;
+    btn.appendChild(thumbGreen(kind,40));
+    const s=document.createElement('span');
+    s.textContent = kind==='breath' ? "Baby's breath" : KIND_INFO[kind].label;
+    btn.appendChild(s);
+    btn.addEventListener('click',()=>addGreen(kind));
+    grid.appendChild(btn);
+  }
+}
 function buildVaseGrid(){
   const grid=document.getElementById('vaseGrid');
   grid.textContent='';
@@ -1243,25 +1427,26 @@ function buildSwatches(){
       NEXT_COLOUR={...sw};
       for(const el of wrap.children) el.classList.remove('on');
       b.classList.add('on');
-      if(SELECTED>=0&&SCENE.blooms[SELECTED]){
-        const bl=SCENE.blooms[SELECTED];
-        bl.col={h:sw.h,s:sw.s,l:sw.l,warm:sw.h<70||sw.h>300};
-        refreshPlacard(); saveArrangement(); paintNow();
+      const sel=SELECTED>=0?SCENE.items[SELECTED]:null;
+      // greens stay green; colour applies to flowers and gypsophila
+      if(sel && KIND_INFO[sel.kind].tinted){
+        sel.col={h:sw.h,s:sw.s,l:sw.l,warm:sw.h<70||sw.h>300};
+        refreshPlacard(); refreshLayerList(); saveArrangement(); paintNow();
       }
       buildFlowerGrid();     // thumbnails follow the chosen colour
     });
     wrap.appendChild(b);
   });
 }
-function freeSpot(){
-  // drop new flowers into the emptiest part of the dome
+function freeSpot(band){
+  // drop new stems into the emptiest part of the dome
   let best=null, bestScore=-1;
   for(let k=0;k<48;k++){
-    const ang=rr(-1.15,1.15), rad=lerp(0.35,1,rnd())*SPREAD;
+    const ang=rr(-1.15,1.15), rad=lerp(band?band[0]:0.35, band?band[1]:1, rnd())*SPREAD;
     const ux=Math.sin(ang)*rad*1.06, uy=-(Math.cos(ang)*rad*0.86+LIFT);
+    if(!SCENE.items.length) return {ux,uy};
     let near=1e9;
-    for(const b of SCENE.blooms) near=Math.min(near,Math.hypot(b.ux-ux,b.uy-uy));
-    if(!SCENE.blooms.length) return {ux,uy};
+    for(const it of SCENE.items) near=Math.min(near,Math.hypot(it.ux-ux,it.uy-uy));
     if(near>bestScore){ bestScore=near; best={ux,uy}; }
   }
   return best;
@@ -1269,56 +1454,120 @@ function freeSpot(){
 function addFlower(key){
   RNG=mulberry32(newSeed());
   const spot=freeSpot();
-  const b=makeBloom(key,
-    {h:NEXT_COLOUR.h,s:NEXT_COLOUR.s,l:NEXT_COLOUR.l,warm:NEXT_COLOUR.h<70||NEXT_COLOUR.h>300},
-    spot.ux, spot.uy, rr(76,102), gauss(0,0.16),
-    {hideStem:Math.abs(spot.ux)<SPREAD*0.3});
-  SCENE.blooms.push(b);            // newest sits in front
-  SELECTED=SCENE.blooms.length-1;
-  syncSelectionUI(); refreshPlacard(); saveArrangement(); paintNow();
-  hint('Drag to place it · brass grip turns it',3200);
+  SCENE.items.push(makeItem('bloom',{spKey:key,
+    col:{h:NEXT_COLOUR.h,s:NEXT_COLOUR.s,l:NEXT_COLOUR.l,warm:NEXT_COLOUR.h<70||NEXT_COLOUR.h>300},
+    ux:spot.ux, uy:spot.uy, size:rr(76,102), rot:gauss(0,0.16),
+    hideStem:Math.abs(spot.ux)<SPREAD*0.3}));
+  afterAdd('Drag to place it · brass grip turns it');
+}
+function addGreen(kind){
+  RNG=mulberry32(newSeed());
+  const f=SCENE.pal.foliage;
+  // foliage anchors low and near the vessel; the frond does the reaching
+  const side=chance(.5)?1:-1;
+  const opts = kind==='breath'
+    ? {col:{h:NEXT_COLOUR.h, s:Math.min(NEXT_COLOUR.s,26), l:Math.max(NEXT_COLOUR.l,78)},
+       ux:side*rr(60,190), uy:-rr(90,220), size:rr(52,84), rot:side*rr(0.25,0.7)}
+    : {col:kind==='euc'?{...f,l:f.l+4}:f,
+       ux:side*rr(35,110), uy:-rr(45,130), size:rr(310,420), rot:side*rr(0.8,1.3)};
+  const item=makeItem(kind,{...opts, stemJitter:gauss(0,5)});
+  // greenery reads as a backdrop, so it goes behind the flowers by default
+  const firstBloom=SCENE.items.findIndex(i=>i.kind==='bloom');
+  if(kind!=='breath' && firstBloom>=0){ SCENE.items.splice(firstBloom,0,item); SELECTED=firstBloom; }
+  else { SCENE.items.push(item); SELECTED=SCENE.items.length-1; }
+  afterAdd('Drag to place it · brass grip turns it', true);
+}
+function afterAdd(msg,keepSelected){
+  if(!keepSelected) SELECTED=SCENE.items.length-1;
+  syncSelectionUI(); refreshPlacard(); refreshLayerList();
+  saveArrangement(); paintNow();
+  hint(msg,3200);
 }
 function syncSelectionUI(){
-  const has=SELECTED>=0&&SCENE&&SCENE.blooms[SELECTED];
-  document.getElementById('selEmpty').hidden=!!has;
-  document.getElementById('selControls').hidden=!has;
-  if(has){
-    const b=SCENE.blooms[SELECTED];
-    document.getElementById('selSize').value=Math.round(b.size);
-    document.getElementById('selTurn').value=Math.round(((b.rot*180/Math.PI+180)%360+360)%360-180);
+  const it=SELECTED>=0&&SCENE?SCENE.items[SELECTED]:null;
+  document.getElementById('selEmpty').hidden=!!it;
+  document.getElementById('selControls').hidden=!it;
+  if(it){
+    const info=KIND_INFO[it.kind];
+    const size=document.getElementById('selSize');
+    size.min=info.min; size.max=info.max;          // a frond and a floret differ by 10x
+    size.value=Math.round(clamp(it.size,info.min,info.max));
+    document.getElementById('selTurn').value=Math.round(((it.rot*180/Math.PI+180)%360+360)%360-180);
+    document.getElementById('selKind').textContent =
+      it.kind==='bloom' ? SPECIES[it.spKey].label : info.label;
   }
+}
+function itemLabel(it){
+  return it.kind==='bloom' ? SPECIES[it.spKey].label : KIND_INFO[it.kind].label;
+}
+function itemSwatch(it){
+  if(it.kind==='fern'||it.kind==='euc') return hsl(it.col.h,it.col.s,it.col.l+12);
+  return hsl(it.col.h,it.col.s,it.col.l);
+}
+// Layer stack, front at the top — the same order the canvas draws in, reversed
+function refreshLayerList(){
+  const list=document.getElementById('layerList');
+  if(!list||!SCENE) return;
+  list.textContent='';
+  for(let i=SCENE.items.length-1;i>=0;i--){
+    const it=SCENE.items[i];
+    const row=document.createElement('button');
+    row.type='button';
+    row.className='layer'+(i===SELECTED?' on':'');
+    row.dataset.idx=i;
+    const chip=document.createElement('i');
+    chip.style.background=itemSwatch(it);
+    const name=document.createElement('span'); name.textContent=itemLabel(it);
+    const depth=document.createElement('em'); depth.textContent=String(i+1);
+    row.append(chip,name,depth);
+    row.addEventListener('click',()=>{
+      SELECTED=i; syncSelectionUI(); refreshLayerList(); paintNow();
+    });
+    list.appendChild(row);
+  }
+  document.getElementById('layerCount').textContent =
+    SCENE.items.length ? SCENE.items.length+' stems' : 'empty';
 }
 function deleteSelected(){
   if(SELECTED<0) return;
-  SCENE.blooms.splice(SELECTED,1);
+  SCENE.items.splice(SELECTED,1);
   SELECTED=-1;
-  syncSelectionUI(); refreshPlacard(); saveArrangement(); paintNow();
+  syncSelectionUI(); refreshPlacard(); refreshLayerList(); saveArrangement(); paintNow();
 }
 function moveSelected(dir){
   if(SELECTED<0) return;
-  const i=SELECTED, j=dir>0?Math.min(SCENE.blooms.length-1,i+1):Math.max(0,i-1);
+  const i=SELECTED, j=dir>0?Math.min(SCENE.items.length-1,i+1):Math.max(0,i-1);
   if(i===j) return;
-  const [b]=SCENE.blooms.splice(i,1);
-  SCENE.blooms.splice(j,0,b);
-  SELECTED=j; paintNow(); saveArrangement();
+  const [it]=SCENE.items.splice(i,1);
+  SCENE.items.splice(j,0,it);
+  SELECTED=j; refreshLayerList(); paintNow(); saveArrangement();
+}
+function sendSelected(edge){
+  if(SELECTED<0) return;
+  const [it]=SCENE.items.splice(SELECTED,1);
+  if(edge>0){ SCENE.items.push(it); SELECTED=SCENE.items.length-1; }
+  else { SCENE.items.unshift(it); SELECTED=0; }
+  refreshLayerList(); paintNow(); saveArrangement();
 }
 document.getElementById('selSize').addEventListener('input',e=>{
   if(SELECTED<0) return;
-  SCENE.blooms[SELECTED].size=+e.target.value; paintNow();
+  SCENE.items[SELECTED].size=+e.target.value; paintNow();
 });
 document.getElementById('selSize').addEventListener('change',saveArrangement);
 document.getElementById('selTurn').addEventListener('input',e=>{
   if(SELECTED<0) return;
-  SCENE.blooms[SELECTED].rot=(+e.target.value)*Math.PI/180; paintNow();
+  SCENE.items[SELECTED].rot=(+e.target.value)*Math.PI/180; paintNow();
 });
 document.getElementById('selTurn').addEventListener('change',saveArrangement);
 document.getElementById('selDelete').addEventListener('click',deleteSelected);
 document.getElementById('selFront').addEventListener('click',()=>moveSelected(1));
 document.getElementById('selBack').addEventListener('click',()=>moveSelected(-1));
+document.getElementById('selToFront').addEventListener('click',()=>sendSelected(1));
+document.getElementById('selToBack').addEventListener('click',()=>sendSelected(-1));
 document.getElementById('clearAll').addEventListener('click',()=>{
-  SCENE.blooms.length=0; SELECTED=-1;
-  syncSelectionUI(); refreshPlacard(); saveArrangement(); paintNow();
-  hint('Empty vase — add flowers from the panel',3600);
+  SCENE.items.length=0; SELECTED=-1;
+  syncSelectionUI(); refreshPlacard(); refreshLayerList(); saveArrangement(); paintNow();
+  hint('Empty vase — add flowers and greenery from the panel',3600);
 });
 function setArranging(on){
   ARRANGING=on;
@@ -1326,8 +1575,8 @@ function setArranging(on){
   studio.classList.toggle('open',on);
   document.getElementById('make').classList.toggle('on',on);
   if(on){
-    buildVaseGrid(); syncSelectionUI();
-    hint('Click a flower to select · drag to move · grip to turn',5000);
+    buildVaseGrid(); syncSelectionUI(); refreshLayerList();
+    hint('Click anything to select · drag to move · grip to turn',5000);
   }else{
     SELECTED=-1; hintEl.classList.remove('show');
   }
@@ -1344,11 +1593,12 @@ function saveArrangement(){
   clearTimeout(saveTimer);
   saveTimer=setTimeout(()=>{
     try{
-      const d={s:SCENE.seed, v:SCENE.vase, b:SCENE.blooms.map(b=>[
-        SPECIES_KEYS.indexOf(b.spKey), Math.round(b.ux), Math.round(b.uy),
-        Math.round(b.size), Math.round(b.rot*100),
-        Math.round(b.col.h), Math.round(b.col.s), Math.round(b.col.l),
-        b.hideStem?1:0, b.seed>>>0
+      const d={s:SCENE.seed, v:SCENE.vase, b:SCENE.items.map(it=>[
+        KINDS.indexOf(it.kind), SPECIES_KEYS.indexOf(it.spKey),
+        Math.round(it.ux), Math.round(it.uy),
+        Math.round(it.size), Math.round(it.rot*100),
+        Math.round(it.col.h), Math.round(it.col.s), Math.round(it.col.l),
+        it.hideStem?1:0, it.seed>>>0, Math.round(it.stemJitter||0)
       ])};
       history.replaceState(null,'','#a='+btoa(JSON.stringify(d)).replace(/=+$/,''));
     }catch(_){}
@@ -1360,10 +1610,12 @@ function loadArrangement(str){
   buildScene(d.s>>>0,{vase:d.v, empty:true});
   SCENE.vase=d.v in VASES ? d.v : 'compote';
   for(const a of d.b){
-    const key=SPECIES_KEYS[a[0]]||'rose';
-    SCENE.blooms.push(makeBloom(key,
-      {h:a[5],s:a[6],l:a[7],warm:a[5]<70||a[5]>300},
-      a[1],a[2],a[3],a[4]/100,{hideStem:!!a[8], seed:a[9]>>>0}));
+    const kind=KINDS[a[0]]||'bloom';
+    SCENE.items.push(makeItem(kind,{
+      spKey: kind==='bloom' ? (SPECIES_KEYS[a[1]]||'rose') : null,
+      col:{h:a[6],s:a[7],l:a[8],warm:a[6]<70||a[6]>300},
+      ux:a[2], uy:a[3], size:a[4], rot:a[5]/100,
+      hideStem:!!a[9], seed:a[10]>>>0, stemJitter:a[11]||0}));
   }
   refreshPlacard();
 }
@@ -1392,7 +1644,7 @@ function start(seed,opts){
   buildScene(CURRENT_SEED,opts);
   history.replaceState(null,'','#s='+CURRENT_SEED);
   if(ARRANGING) buildVaseGrid();
-  syncSelectionUI();
+  syncSelectionUI(); refreshLayerList();
   repaint();
 }
 function regen(){ start(newSeed()); }
@@ -1416,23 +1668,25 @@ addEventListener('keydown',e=>{
   else if(e.key==='s'||e.key==='S'){document.getElementById('save').click();}
   else if(e.key==='e'||e.key==='E'){setArranging(!ARRANGING);}
   else if(ARRANGING&&SELECTED>=0){
-    const b=SCENE.blooms[SELECTED];
+    const it=SCENE.items[SELECTED]; if(!it) return;
     if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();deleteSelected();}
-    else if(e.key==='Escape'){SELECTED=-1;syncSelectionUI();paintNow();}
-    else if(e.key==='['){b.rot-=0.08;syncSelectionUI();paintNow();saveArrangement();}
-    else if(e.key===']'){b.rot+=0.08;syncSelectionUI();paintNow();saveArrangement();}
+    else if(e.key==='Escape'){SELECTED=-1;syncSelectionUI();refreshLayerList();paintNow();}
+    else if(e.key==='['){it.rot-=0.08;syncSelectionUI();paintNow();saveArrangement();}
+    else if(e.key===']'){it.rot+=0.08;syncSelectionUI();paintNow();saveArrangement();}
+    else if(e.key==='PageUp'){e.preventDefault();moveSelected(1);}
+    else if(e.key==='PageDown'){e.preventDefault();moveSelected(-1);}
     else if(e.key.startsWith('Arrow')){
       e.preventDefault();
       const step=e.shiftKey?12:4;
-      if(e.key==='ArrowLeft')b.ux-=step; else if(e.key==='ArrowRight')b.ux+=step;
-      else if(e.key==='ArrowUp')b.uy-=step; else if(e.key==='ArrowDown')b.uy+=step;
+      if(e.key==='ArrowLeft')it.ux-=step; else if(e.key==='ArrowRight')it.ux+=step;
+      else if(e.key==='ArrowUp')it.uy-=step; else if(e.key==='ArrowDown')it.uy+=step;
       paintNow(); saveArrangement();
     }
   }
 });
 
 resize(); lastW=W; lastH=H;
-buildSwatches(); buildFlowerGrid();
+buildSwatches(); buildFlowerGrid(); buildGreenGrid();
 const hash=location.hash;
 const mArr=hash.match(/a=([A-Za-z0-9+/=]+)/);
 const mSeed=hash.match(/s=(\d+)/);
@@ -1440,5 +1694,5 @@ try{
   if(mArr){ CURRENT_SEED=0; loadArrangement(mArr[1]); CURRENT_SEED=SCENE.seed; repaint(); }
   else start(mSeed?parseInt(mSeed[1],10):newSeed());
 }catch(err){ start(newSeed()); }
-buildVaseGrid();
+buildVaseGrid(); refreshLayerList();
 </script>

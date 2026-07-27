@@ -12,10 +12,15 @@ linked, reloaded, and shared exactly as it was.
 
 Press **Make your own** (or `e`) to open the arranging table:
 
-- **Add flowers** from the picker — the thumbnails are the real flowers, drawn live
-  in whichever colour you've selected.
-- **Drag any bloom** to move it, and turn it with the brass grip that follows it around.
-  Everything is measured from the vase, so the arrangement holds together at any size.
+- **Add flowers and greenery** from the pickers — the thumbnails are the real thing,
+  drawn live in whichever colour you've selected.
+- **Drag anything** to move it, and turn it with the brass grip that follows it around.
+  Flowers, ferns, eucalyptus and gypsophila are all the same kind of object: every one
+  is stemmed into the vase and measured from it, so the arrangement holds together at
+  any window size.
+- **Reorder the layers.** The layer list shows the whole stack, front at the top. Move a
+  stem one step or send it to the very front or back, so greenery can sit behind the
+  flowers or spill in front of them.
 - **Choose a vase** — compote, bud vase, ginger jar, jar, cylinder, urn, goblet, or a
   plain hand-tied twine wrap. Glass vessels show the stems through the water.
 - **Empty the vase** to start from nothing and build it yourself.
@@ -25,11 +30,16 @@ them and the link carries the whole arrangement to whoever you send it to.
 
 | | |
 | --- | --- |
-| Select / move | Click a bloom, then drag |
+| Select / move | Click anything, then drag |
 | Turn | Drag the brass grip, or `[` and `]` |
 | Nudge | Arrow keys (`shift` for bigger steps) |
+| Layer | `PageUp` / `PageDown`, or the Front / Back buttons |
 | Remove | `Delete` |
-| Depth | **Front** / **Back** — newest flowers sit in front |
+
+Foliage is hit-tested against its own alpha mask rather than a bounding box, so a click
+lands on a frond only where leaves actually are and falls through the gaps to whatever
+is behind. Anything buried completely behind the flowers is still reachable from the
+layer list.
 
 ## The fractals are the botany
 
