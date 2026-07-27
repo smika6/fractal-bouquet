@@ -102,6 +102,23 @@ Open `index.html` in a browser, or serve the folder:
 python -m http.server 8000
 ```
 
+## How it draws
+
+Building a bouquet is essentially free — a few hundred microseconds of geometry.
+Painting one is not: a couple of dozen flowers is thousands of filled paths, around
+10ms a frame at retina resolution. Animating that directly meant redrawing every petal
+seventy times over, which is what made the old intro stutter.
+
+So the arrangement is painted **once**, into two offscreen layers — the flowers and the
+vessel — while the previous bouquet is still on screen. The reveal then composites those
+layers: the vessel settles, the bouquet opens out of its mouth past its final size and
+eases back, and the bouquet you were looking at dissolves away underneath. Two blits a
+frame, under 2ms, so the curve can be as lively as it likes. The layers are released as
+soon as the reveal ends, and the settled frame is always drawn live, at full resolution.
+
+Fronds are baked to sprites the same way, since a bipinnate fern is thousands of leaf
+blades and only changes when you edit it.
+
 ## Notes
 
 Drawing is seeded per frame, so a given bouquet renders identically every time rather

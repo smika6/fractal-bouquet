@@ -1188,9 +1188,55 @@ let START=null, RAF=null, WATCHDOG=null, ARRANGING=false;
 // press again straight away.
 const INTRO_MS=1150;
 const reduceMotion=matchMedia('(prefers-reduced-motion:reduce)').matches;
-function eased(t,delay,back){
-  const d=clamp((t-delay)/(1-delay*0.6),0,1);
-  return back?Math.max(0.001,easeOutBack(d)):easeOut(d);
+// paint the arrangement stem by stem — used when editing, and to bake the
+// layers the intro composites
+function renderLive(S,cx,mouthY){
+  drawVesselBack(SCENE.vase,S,cx,mouthY);
+  // one pass, in layer order — flowers and greenery share the same stack, and
+  // each stem is drawn with its own item so it is never buried by a later one
+  for(const it of SCENE.items){
+    drawStem(it,S,cx,mouthY);
+    drawItem(it,S,cx,mouthY,1);
+  }
+  drawVase(SCENE.vase,S,cx,mouthY);
+}
+/* The reveal: the vessel settles first, then the arrangement opens out of its
+   mouth. Both are single blits of already-painted layers, so the curve can be
+   as lively as it likes without costing anything. */
+function drawReveal(t){
+  const I=INTRO;
+  // the bouquet that was there dissolves away as this one opens
+  if(I.prev && t<0.34){
+    ctx.save(); ctx.globalAlpha=1-easeOut(t/0.34);
+    ctx.drawImage(I.prev,0,0,W,H); ctx.restore();
+  }
+  const ve=easeOut(clamp(t/0.34,0,1));           // vessel settles in first
+  const armT=clamp((t-0.1)/0.9,0,1);
+  const grow=0.82+0.18*easeOutBack(armT);        // opens past 1 and settles back
+  const fade=easeOut(clamp(armT*1.5,0,1));
+  // a breath of warm light behind the opening bouquet, brightest mid-way
+  const glow=Math.sin(Math.PI*clamp(armT,0,1))*0.16;
+  if(glow>0.004){
+    const gy=I.mouthY-I.bh*0.35;
+    const gr=ctx.createRadialGradient(I.cx,gy,4,I.cx,gy,I.bw*0.5);
+    gr.addColorStop(0,hsl(SCENE.pal.base,60,66,glow));
+    gr.addColorStop(1,hsl(SCENE.pal.base,60,66,0));
+    ctx.fillStyle=gr;
+    ctx.fillRect(I.x0,I.y0,I.bw,I.bh);           // only over the bouquet, not the page
+  }
+  ctx.save();
+  ctx.globalAlpha=fade;
+  ctx.translate(I.cx,I.mouthY);                  // opens from the vessel mouth
+  ctx.scale(grow,grow);
+  ctx.translate(-I.cx,-I.mouthY);
+  ctx.drawImage(I.arr, I.x0, I.y0, I.bw, I.bh);
+  ctx.restore();
+  // vessel last, so stems end inside it however far the bouquet has opened
+  ctx.save();
+  ctx.globalAlpha=ve;
+  ctx.translate(0,(1-ve)*16);
+  ctx.drawImage(I.vase, I.vx0, I.vy0, I.vbw, I.vbh);
+  ctx.restore();
 }
 function render(now){
   const {S,cx,mouthY}=layout();
@@ -1201,21 +1247,78 @@ function render(now){
   const t=(ARRANGING||reduceMotion)?1:clamp((now-START)/INTRO_MS,0,1);
 
   ground();
-  drawVesselBack(SCENE.vase,S,cx,mouthY);
-  // one pass, in layer order — flowers and greenery share the same stack, and
-  // each stem is drawn with its own item so it is never buried by a later one
-  for(const it of SCENE.items){
-    drawStem(it,S,cx,mouthY);
-    drawItem(it,S,cx,mouthY,eased(t,it.delay||0,it.kind==='bloom'));
-  }
-  drawVase(SCENE.vase,S,cx,mouthY);
+  if(INTRO && t<1) drawReveal(t);
+  else             renderLive(S,cx,mouthY);
   vignette(t>=1 && !ARRANGING);
   selectionOverlay(S,cx,mouthY);
 
-  if(t<1) RAF=requestAnimationFrame(render); else RAF=null;
+  if(t<1) RAF=requestAnimationFrame(render);
+  else { RAF=null; INTRO=null; }                 // release the layers once shown
+}
+/* ---------------------------------------------------------------------------
+   The intro used to redraw every petal on every frame — about 10ms of path
+   filling per frame, which is what made it stutter. The arrangement is instead
+   painted once into two offscreen layers while the previous bouquet is still
+   on screen, and the reveal is then pure compositing: two blits a frame.
+   ------------------------------------------------------------------------- */
+let INTRO=null;
+function bakeIntro(){
+  INTRO=null;
+  if(!SCENE||!SCENE.items.length) return;
+  const {S,cx,mouthY}=layout();
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  for(const it of SCENE.items){
+    const g=itemGeom(it,S,cx,mouthY);
+    if(g.x-g.r<x0)x0=g.x-g.r; if(g.x+g.r>x1)x1=g.x+g.r;
+    if(g.y-g.r<y0)y0=g.y-g.r; if(g.y+g.r>y1)y1=g.y+g.r;
+  }
+  const v=VASES[SCENE.vase];
+  const vw=(v.w||80)*S, vh=(v.h||46)*S;
+  x0=Math.min(x0,cx-vw*0.75); x1=Math.max(x1,cx+vw*0.75);
+  y0=Math.min(y0,mouthY-30*S); y1=Math.max(y1,mouthY+vh+40*S);
+  if(!isFinite(x0)||!isFinite(y1)) return;
+  const pad=28;
+  x0=Math.max(0,Math.floor(x0-pad)); y0=Math.max(0,Math.floor(y0-pad));
+  x1=Math.min(W,Math.ceil(x1+pad));  y1=Math.min(H,Math.ceil(y1+pad));
+  const bw=Math.max(2,x1-x0), bh=Math.max(2,y1-y0);
+  // the vessel needs only its own corner of the frame, not the whole crown
+  const vx0=Math.max(0,Math.floor(cx-vw*0.8-pad)), vx1=Math.min(W,Math.ceil(cx+vw*0.8+pad));
+  const vy0=Math.max(0,Math.floor(mouthY-vw*0.35-pad)), vy1=Math.min(H,Math.ceil(mouthY+vh+pad*2));
+  const vbw=Math.max(2,vx1-vx0), vbh=Math.max(2,vy1-vy0);
+  // Baked layers only show while the reveal is running — the settled frame is
+  // always drawn live — so they can be a touch coarser than the display.
+  const budget=4.2e6;
+  const scaleFor=(w,h)=>{ const px=w*h*DPR*DPR; return px>budget ? DPR*Math.sqrt(budget/px) : DPR; };
+  const layer=(ox,oy,w,h,q)=>{
+    const c=document.createElement('canvas');
+    c.width=Math.ceil(w*q); c.height=Math.ceil(h*q);
+    const o=c.getContext('2d');
+    o.setTransform(q,0,0,q,-ox*q,-oy*q);            // keep world coordinates
+    return {c,o};
+  };
+  try{
+    // A half-size grab of what is currently on screen, so the previous bouquet
+    // dissolves into the new one instead of blinking out. Cheap: ~1.5MB.
+    let prev=null;
+    try{
+      const pw=Math.max(2,Math.round(W*0.5)), ph=Math.max(2,Math.round(H*0.5));
+      const pc=document.createElement('canvas'); pc.width=pw; pc.height=ph;
+      pc.getContext('2d').drawImage(canvas,0,0,pw,ph);
+      prev=pc;
+    }catch(_){}
+    const arr=layer(x0,y0,bw,bh,scaleFor(bw,bh));
+    const ves=layer(vx0,vy0,vbw,vbh,scaleFor(vbw,vbh));
+    let real=swapCtx(arr.o);
+    drawVesselBack(SCENE.vase,S,cx,mouthY);
+    for(const it of SCENE.items){ drawStem(it,S,cx,mouthY); drawItem(it,S,cx,mouthY,1); }
+    swapCtx(real);
+    real=swapCtx(ves.o); drawVase(SCENE.vase,S,cx,mouthY); swapCtx(real);
+    INTRO={arr:arr.c, vase:ves.c, prev, x0,y0,bw,bh, vx0,vy0,vbw,vbh, cx, mouthY};
+  }catch(_){ INTRO=null; }
 }
 function repaint(){
   START=null; if(RAF)cancelAnimationFrame(RAF);
+  if(!ARRANGING && !reduceMotion) bakeIntro();   // paint it before showing it
   RAF=requestAnimationFrame(render);
   clearTimeout(WATCHDOG);
   WATCHDOG=setTimeout(()=>{ if(RAF){cancelAnimationFrame(RAF);RAF=null;} START=-1e9; render(performance.now()); },INTRO_MS+450);
