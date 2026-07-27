@@ -4,9 +4,32 @@ A fractal bouquet that grows a new arrangement on every refresh.
 
 **[See it live →](https://smika6.github.io/fractal-bouquet/)**
 
-Each load seeds a fresh bouquet — species, palette, and composition — then draws it
-to a canvas. The seed lives in the URL hash, so any arrangement you like can be
+Each load seeds a fresh bouquet — species, palette, vase, and composition — then draws
+it to a canvas. The seed lives in the URL hash, so any arrangement you like can be
 linked, reloaded, and shared exactly as it was.
+
+## Make your own
+
+Press **Make your own** (or `e`) to open the arranging table:
+
+- **Add flowers** from the picker — the thumbnails are the real flowers, drawn live
+  in whichever colour you've selected.
+- **Drag any bloom** to move it, and turn it with the brass grip that follows it around.
+  Everything is measured from the vase, so the arrangement holds together at any size.
+- **Choose a vase** — compote, bud vase, ginger jar, jar, cylinder, urn, goblet, or a
+  plain hand-tied twine wrap. Glass vessels show the stems through the water.
+- **Empty the vase** to start from nothing and build it yourself.
+
+Hand-arranged bouquets are encoded into the URL as you work, so a refresh doesn't lose
+them and the link carries the whole arrangement to whoever you send it to.
+
+| | |
+| --- | --- |
+| Select / move | Click a bloom, then drag |
+| Turn | Drag the brass grip, or `[` and `]` |
+| Nudge | Arrow keys (`shift` for bigger steps) |
+| Remove | `Delete` |
+| Depth | **Front** / **Back** — newest flowers sit in front |
 
 ## The fractals are the botany
 
@@ -40,7 +63,14 @@ Three details mattered more than expected, and each was only found by rendering 
 - **Palette.** Petal hues are snapped to bands that actually occur in flowers — no lime
   blooms — with one dominant hue carrying ~62% of the bouquet and a second as accent, the
   way a florist builds. A triad of pure primaries is technically harmonious and still
-  reads as a circus.
+  reads as a circus. Yellows are additionally floored in lightness, because a dark yellow
+  is olive, and no flower is olive.
+
+Vessels are half-silhouette profiles, mirrored and smoothed. The opening is drawn in two
+passes — the far rim behind the stems, the body in front of them — because filling the
+whole mouth on top makes a bowl read as a plate laid over the flowers. Glass takes a light
+fill and hard-edged highlights so the form comes from its edges; ceramic gets a matte
+falloff, since the same curve makes stoneware look chromed.
 
 The placard names what actually bloomed: cultivars are chosen from each flower's rendered
 colour, so a blue rose is labelled 'Blue Moon' and a near-black tulip 'Queen of Night'.
