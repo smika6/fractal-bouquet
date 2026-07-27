@@ -1048,46 +1048,42 @@ function stemWidth(it,S){
   if(it.kind==='breath') return Math.max(1.1, it.size*0.026*S);
   return Math.max(1.6, it.size*0.021*S);
 }
-function stems(S,cx,mouthY){
+/* A stem belongs to its item's layer, not to a pre-pass. Drawing every stem
+   first let the flowers paint over the stems of anything layered in front of
+   them, so front sprigs appeared to float with nothing holding them. */
+function drawStem(it,S,cx,mouthY){
+  if(it.hideStem) return;
   const f=SCENE.pal.foliage;
   const v=VASES[SCENE.vase];
   ctx.lineCap='round';
-  // In a glass vessel the stems stay visible below the waterline — without
-  // them the glass just reads as a solid coloured shape.
+  const wide=stemWidth(it,S);
+  const ex=cx+(it.stemJitter||0)*S;
+  // in a glass vessel the stem stays visible below the waterline
   if(v.glass && v.h){
     ctx.save(); ctx.globalAlpha=0.7;
     const deep=v.h*0.82*S;
-    for(const it of SCENE.items){
-      if(it.hideStem) continue;
-      const ex=cx+(it.stemJitter||0)*S;
-      const g=ctx.createLinearGradient(0,mouthY,0,mouthY+deep);
-      g.addColorStop(0,hsl(f.h,f.s,Math.max(12,f.l-4)));
-      g.addColorStop(1,hsl(f.h,f.s-6,Math.max(9,f.l-14)));
-      ctx.strokeStyle=g; ctx.lineWidth=stemWidth(it,S);
-      ctx.beginPath(); ctx.moveTo(ex,mouthY);
-      ctx.quadraticCurveTo(ex*0.55+cx*0.45,mouthY+deep*0.6,
-                           cx+(it.stemJitter||0)*S*0.3,mouthY+deep);
-      ctx.stroke();
-    }
+    const gw=ctx.createLinearGradient(0,mouthY,0,mouthY+deep);
+    gw.addColorStop(0,hsl(f.h,f.s,Math.max(12,f.l-4)));
+    gw.addColorStop(1,hsl(f.h,f.s-6,Math.max(9,f.l-14)));
+    ctx.strokeStyle=gw; ctx.lineWidth=wide;
+    ctx.beginPath(); ctx.moveTo(ex,mouthY);
+    ctx.quadraticCurveTo(ex*0.55+cx*0.45,mouthY+deep*0.6,
+                         cx+(it.stemJitter||0)*S*0.3,mouthY+deep);
+    ctx.stroke();
     ctx.restore();
   }
-  // Every item is gathered into the vessel — foliage and gypsophila included.
-  // Without this the greenery floats beside the bouquet instead of in it.
-  for(const it of SCENE.items){
-    if(it.hideStem) continue;
-    const x=cx+it.ux*S, y=mouthY+it.uy*S;
-    const g=ctx.createLinearGradient(x,y,cx,mouthY);
-    const tint = it.kind==='breath' ? 6 : 14;
-    g.addColorStop(0,hsl(f.h,f.s,f.l+tint)); g.addColorStop(1,hsl(f.h,f.s,Math.max(12,f.l-8)));
-    const wide=stemWidth(it,S);
-    const mx=cx+it.ux*S*0.35, my=mouthY+it.uy*S*0.4-20*S, ex=cx+(it.stemJitter||0)*S;
-    ctx.strokeStyle=g;
-    ctx.lineWidth=wide*0.62;
-    ctx.beginPath(); ctx.moveTo(x,y); ctx.quadraticCurveTo(mx,my,(mx+ex)/2,(my+mouthY)/2); ctx.stroke();
-    ctx.lineWidth=wide;
-    ctx.beginPath(); ctx.moveTo((mx+ex)/2,(my+mouthY)/2);
-    ctx.quadraticCurveTo(ex,mouthY-8*S,ex,mouthY+18*S); ctx.stroke();
-  }
+  const x=cx+it.ux*S, y=mouthY+it.uy*S;
+  const g=ctx.createLinearGradient(x,y,cx,mouthY);
+  // a gypsophila stem is fine, but it still has to read against a dark ground
+  const tint = it.kind==='breath' ? 16 : 14;
+  g.addColorStop(0,hsl(f.h,f.s,f.l+tint)); g.addColorStop(1,hsl(f.h,f.s,Math.max(12,f.l-8)));
+  const mx=cx+it.ux*S*0.35, my=mouthY+it.uy*S*0.4-20*S;
+  ctx.strokeStyle=g;
+  ctx.lineWidth=wide*0.62;
+  ctx.beginPath(); ctx.moveTo(x,y); ctx.quadraticCurveTo(mx,my,(mx+ex)/2,(my+mouthY)/2); ctx.stroke();
+  ctx.lineWidth=wide;
+  ctx.beginPath(); ctx.moveTo((mx+ex)/2,(my+mouthY)/2);
+  ctx.quadraticCurveTo(ex,mouthY-8*S,ex,mouthY+18*S); ctx.stroke();
 }
 /* A bipinnate frond is thousands of leaf blades, and it only changes when it
    is edited — so bake each one once and blit it thereafter. This is what keeps
@@ -1181,10 +1177,12 @@ function render(now){
 
   ground();
   drawVesselBack(SCENE.vase,S,cx,mouthY);
-  stems(S,cx,mouthY);
-  // one pass, in layer order — flowers and greenery share the same stack
-  for(const it of SCENE.items)
+  // one pass, in layer order — flowers and greenery share the same stack, and
+  // each stem is drawn with its own item so it is never buried by a later one
+  for(const it of SCENE.items){
+    drawStem(it,S,cx,mouthY);
     drawItem(it,S,cx,mouthY,eased(t,it.delay||0,it.kind==='bloom'));
+  }
   drawVase(SCENE.vase,S,cx,mouthY);
   vignette(t>=1 && !ARRANGING);
   selectionOverlay(S,cx,mouthY);
@@ -1454,10 +1452,13 @@ function freeSpot(band){
 function addFlower(key){
   RNG=mulberry32(newSeed());
   const spot=freeSpot();
+  // A hand-placed flower always keeps its stem. Hiding centre stems only makes
+  // sense in a full generated bouquet where other stems stand in for them —
+  // in a vase you are building yourself it just leaves the bloom floating.
   SCENE.items.push(makeItem('bloom',{spKey:key,
     col:{h:NEXT_COLOUR.h,s:NEXT_COLOUR.s,l:NEXT_COLOUR.l,warm:NEXT_COLOUR.h<70||NEXT_COLOUR.h>300},
     ux:spot.ux, uy:spot.uy, size:rr(76,102), rot:gauss(0,0.16),
-    hideStem:Math.abs(spot.ux)<SPREAD*0.3}));
+    hideStem:false, stemJitter:gauss(0,6)}));
   afterAdd('Drag to place it · brass grip turns it');
 }
 function addGreen(kind){
