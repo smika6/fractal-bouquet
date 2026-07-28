@@ -8,6 +8,18 @@ no network access — so it ports across almost unchanged.
 It also **idles at zero CPU**: once a bouquet finishes arriving, the render loop stops
 entirely until the next one is due. Nothing animates in between.
 
+## Local install vs. publishing
+
+Two different things, and you only need the first if you want the second:
+
+- **Loading it in** (below) puts it on your own machine. Nobody else can see it.
+- **Publishing to the Steam Workshop** hosts it for everyone. Steam stores and
+  distributes the files; you are not hosting anything. Others subscribe and it downloads
+  automatically, updates included.
+
+Publishing happens *from* the editor, so the local install is simply the one-time step
+that gets the project in front of the publish button.
+
 ## Installing it
 
 1. Open Wallpaper Engine → **Wallpaper Editor** → **Create Wallpaper**.
@@ -23,6 +35,20 @@ entirely until the next one is due. Nothing animates in between.
 If you would rather not hand-edit the manifest, the editor's own
 *Edit → Change project settings → Add property* dialog produces the same result — the
 property names must match `cycleseconds`, `vessel`, `fullness`, `showplacard`, `motion`.
+
+## Publishing it to the Workshop
+
+With the project open in the editor, use **Share on Workshop**. Only a **title** and a
+**preview image** are strictly required; both are already here. In the publish dialog you
+choose the visibility — `project.json` ships as `private`, so change it there (or in the
+file) if you want it publicly listed.
+
+`preview.jpg` is 1920×1080, the aspect the Workshop grid expects. If you replace it with
+an animated GIF, keep it under 1MB and ideally under 500KB — that limit applies to
+animated previews, not static ones.
+
+The whole wallpaper is three small files and loads nothing from the network, which keeps
+it well clear of the usual review friction around web wallpapers fetching remote content.
 
 ## Settings
 
