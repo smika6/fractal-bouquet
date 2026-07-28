@@ -93,6 +93,13 @@ colour, so a blue rose is labelled 'Blue Moon' and a near-black tulip 'Queen of 
 | Save a PNG | Press `s`, or click **Save** |
 | Keep one | Copy the URL — the `#s=` seed reproduces it exactly |
 
+## As a desktop wallpaper
+
+There is a [Wallpaper Engine build](wallpaper-engine/) in this repo. Wallpaper Engine's
+Web wallpaper type runs a local HTML file in an embedded Chromium, so the same single
+file works there with no changes — it detects the host, hides the editing chrome, and
+cycles bouquets on a timer. It idles at zero CPU between them.
+
 ## Running it
 
 One self-contained file with no dependencies, no build step, and no network calls.

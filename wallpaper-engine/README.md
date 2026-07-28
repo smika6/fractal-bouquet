@@ -1,0 +1,56 @@
+# Generative Still Life — Wallpaper Engine
+
+A [Wallpaper Engine](https://store.steampowered.com/app/431960/) build of the fractal
+bouquet. Wallpaper Engine's **Web** wallpaper type runs a local HTML file in an embedded
+Chromium, and this project is one self-contained file — no dependencies, no build step,
+no network access — so it ports across almost unchanged.
+
+It also **idles at zero CPU**: once a bouquet finishes arriving, the render loop stops
+entirely until the next one is due. Nothing animates in between.
+
+## Installing it
+
+1. Open Wallpaper Engine → **Wallpaper Editor** → **Create Wallpaper**.
+2. Pick any file when prompted, choose **Web**, and give it a name. This creates a
+   project folder under `Steam/steamapps/common/wallpaper_engine/projects/myprojects/`.
+3. Copy `index.html`, `preview.png` and `project.json` from this folder into that
+   project folder, replacing what the editor generated.
+4. Reopen the project in the editor. The preview should show the bouquet, and the five
+   settings below should appear in the properties panel.
+5. **Apply** it, or use **Workshop → Publish** to upload it (set `visibility` in
+   `project.json` to `public` first if you want it listed).
+
+If you would rather not hand-edit the manifest, the editor's own
+*Edit → Change project settings → Add property* dialog produces the same result — the
+property names must match `cycleseconds`, `vessel`, `fullness`, `showplacard`, `motion`.
+
+## Settings
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| Seconds between bouquets | 45 | How often it rearranges. **0 holds one bouquet forever.** |
+| Vessel | Surprise me | Pin one of the eight vessels, or let each bouquet pick. |
+| Fullness | 100 | Flowers per bouquet, from a sparse handful to a crowded one. |
+| Show the gallery placard | on | The museum label naming what bloomed. |
+| Animate each new bouquet | on | Off swaps bouquets instantly, with no reveal. |
+
+## Notes on the port
+
+The same `index.html` serves as both the web page and the wallpaper. It detects
+Wallpaper Engine by the presence of its injected globals (or a `?mode=wallpaper` flag,
+which is handy for testing in an ordinary browser) and then:
+
+- hides the arranging studio, buttons and hints — there is nothing to click on a desktop
+- cycles bouquets on a timer, since nobody refreshes a wallpaper
+- skips writing the seed to the URL, which an embedded browser may refuse on `file://`
+- pauses the cycle while the desktop is covered, so a fullscreen game costs nothing
+
+Because the bouquet is painted once into offscreen layers and revealed by compositing,
+each reveal frame costs under 2ms even at 4K — the work happens in a single ~26ms burst
+between bouquets, not continuously.
+
+## Interactivity
+
+The arranging studio is deliberately switched off here. Wallpaper Engine can forward
+mouse input, but a desktop is a poor place to drag flowers around — build your bouquet
+in the browser version, and the URL it produces carries the whole arrangement.

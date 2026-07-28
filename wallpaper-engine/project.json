@@ -1,0 +1,61 @@
+{
+  "title": "Generative Still Life",
+  "description": "A fractal bouquet that arranges itself anew on a timer. Flowers are grown from botanical primitives — recursive ferns, golden-angle petal spirals, phyllotaxis seed discs — and gathered into a vessel of your choosing.",
+  "type": "web",
+  "file": "index.html",
+  "preview": "preview.jpg",
+  "contentrating": "Everyone",
+  "visibility": "private",
+  "tags": ["Abstract", "Relaxing"],
+  "general": {
+    "properties": {
+      "cycleseconds": {
+        "order": 1,
+        "text": "Seconds between bouquets",
+        "type": "slider",
+        "value": 45,
+        "min": 0,
+        "max": 600,
+        "step": 5
+      },
+      "vessel": {
+        "order": 2,
+        "text": "Vessel",
+        "type": "combo",
+        "value": "random",
+        "options": [
+          { "label": "Surprise me", "value": "random" },
+          { "label": "Footed compote", "value": "compote" },
+          { "label": "Bud vase", "value": "bud" },
+          { "label": "Ginger jar", "value": "ginger" },
+          { "label": "Jar", "value": "jar" },
+          { "label": "Cylinder", "value": "cylinder" },
+          { "label": "Urn", "value": "urn" },
+          { "label": "Goblet", "value": "footed" },
+          { "label": "Hand-tied, no vessel", "value": "tie" }
+        ]
+      },
+      "fullness": {
+        "order": 3,
+        "text": "Fullness",
+        "type": "slider",
+        "value": 100,
+        "min": 40,
+        "max": 160,
+        "step": 5
+      },
+      "showplacard": {
+        "order": 4,
+        "text": "Show the gallery placard",
+        "type": "bool",
+        "value": true
+      },
+      "motion": {
+        "order": 5,
+        "text": "Animate each new bouquet",
+        "type": "bool",
+        "value": true
+      }
+    }
+  }
+}
