@@ -55,6 +55,15 @@
         "text": "Animate each new bouquet",
         "type": "bool",
         "value": true
+      },
+      "pollinators": {
+        "order": 6,
+        "text": "Pollinators (bee, butterfly, dragonfly)",
+        "type": "slider",
+        "value": 3,
+        "min": 0,
+        "max": 3,
+        "step": 1
       }
     }
   }

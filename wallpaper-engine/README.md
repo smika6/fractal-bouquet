@@ -59,6 +59,22 @@ it well clear of the usual review friction around web wallpapers fetching remote
 | Fullness | 100 | Flowers per bouquet, from a sparse handful to a crowded one. |
 | Show the gallery placard | on | The museum label naming what bloomed. |
 | Animate each new bouquet | on | Off swaps bouquets instantly, with no reveal. |
+| Pollinators | 3 | A bee, a butterfly and a dragonfly, in that order. 0 for none. |
+
+### The pollinators
+
+They work the bouquet on their own errands — visiting flower heads, hovering, moving
+on. Each flies in character: the bee darts and fusses, the butterfly drifts and bobs,
+the dragonfly holds still then crosses the frame in a blink.
+
+Move your cursor near one and it gets distracted, breaking off to circle the pointer
+until it loses interest and goes back to the flowers. A *stationary* cursor is ignored —
+it has to be moving to be worth chasing, so a parked mouse doesn't hold them hostage.
+
+They cost almost nothing. The settled bouquet is captured once and each frame repaints
+only the small square around each insect from that capture — around 1.6% of the screen,
+roughly 0.1ms a frame, against 15ms to redraw the arrangement. The flowers themselves
+are never redrawn while the insects fly.
 
 ## Notes on the port
 

@@ -109,6 +109,19 @@ Open `index.html` in a browser, or serve the folder:
 python -m http.server 8000
 ```
 
+## Pollinators
+
+A bee, a butterfly and a dragonfly work the bouquet, each flying in character — the bee
+darts and fusses, the butterfly drifts, the dragonfly hangs still and then crosses the
+frame in a blink. Move the cursor near one and it gets distracted, breaking off to circle
+the pointer until it loses interest. A stationary cursor is ignored; it has to be moving
+to be worth chasing. Press `b` to send them away.
+
+They are close to free. The settled bouquet is captured once, and each frame repaints only
+the small square around each insect out of that capture — about 1.6% of the screen and
+0.1ms a frame, against 15ms to redraw the arrangement. The flowers never redraw while the
+insects fly, which is what lets this run on a desktop without costing anything.
+
 ## How it draws
 
 Building a bouquet is essentially free — a few hundred microseconds of geometry.

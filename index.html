@@ -1271,7 +1271,10 @@ function render(now){
   selectionOverlay(S,cx,mouthY);
 
   if(t<1) RAF=requestAnimationFrame(render);
-  else { RAF=null; INTRO=null; }                 // release the layers once shown
+  else {
+    RAF=null; INTRO=null;                        // release the layers once shown
+    captureSettled();                            // hand the frame to the insects
+  }
 }
 /* ---------------------------------------------------------------------------
    The intro used to redraw every petal on every frame — about 10ms of path
@@ -1335,6 +1338,7 @@ function bakeIntro(){
   }catch(_){ INTRO=null; }
 }
 function repaint(){
+  invalidateSettled();
   START=null; if(RAF)cancelAnimationFrame(RAF);
   if(!ARRANGING && !reduceMotion && MOTION) bakeIntro();   // paint it before showing it
   RAF=requestAnimationFrame(render);
@@ -1343,10 +1347,315 @@ function repaint(){
 }
 let paintQueued=false;
 function paintNow(){                       // one repaint per frame while dragging
+  invalidateSettled();
   if(paintQueued) return;
   paintQueued=true;
   requestAnimationFrame(()=>{ paintQueued=false; START=-1e9; render(performance.now()); });
 }
+
+/* ============================================================================
+   POLLINATORS
+   A bee, a butterfly and a dragonfly work the bouquet on their own errands.
+   A moving cursor nearby distracts them — they break off and follow it until
+   they lose interest. A parked cursor is ignored; it has to move to be
+   interesting.
+
+   The settled bouquet is captured once, and each frame only repaints the few
+   hundred pixels around each insect from that capture. The arrangement itself
+   is never redrawn, so this stays affordable enough to leave running on a
+   desktop.
+   ========================================================================== */
+let SETTLED=null, BUGS=[], bugRAF=null, bugLast=0, BUG_COUNT=3;
+// insects roam on their own randomness — drawing from the seeded stream would
+// make the bouquet's own geometry depend on where a bee happened to fly
+const bR=()=>Math.random();
+const bRR=(a,b)=>a+(b-a)*Math.random();
+const bPick=a=>a[Math.floor(Math.random()*a.length)];
+const bChance=p=>Math.random()<p;
+const MOUSE={x:-1e5,y:-1e5,moved:0};
+
+const BUG_KINDS={
+  bee:      {size:[13,16],    cruise:[95,150],  accel:1400, jitter:1.5, hover:[.35,1.1], wing:52},
+  butterfly:{size:[20,25],    cruise:[42,72],   accel:520,  jitter:0.7, hover:[.9,2.4],  wing:7.5},
+  dragonfly:{size:[20,26],    cruise:[150,235], accel:2100, jitter:0.5, hover:[.5,1.6],  wing:64},
+};
+function spawnBugs(){
+  BUGS=[];
+  if(!SCENE) return;
+  const kinds=['bee','butterfly','dragonfly'].slice(0,clamp(BUG_COUNT,0,3));
+  const {S,cx,mouthY}=layout();
+  // A butterfly picks up the bouquet's colours; a dragonfly stays its own
+  // iridescent blue-green, because that is what dragonflies are.
+  const base=SCENE.pal.base;
+  const COL={
+    bee:null,
+    butterfly:{h:snapHue(base+bRR(150,210)), s:bRR(52,74), l:bRR(56,70)},
+    dragonfly:{h:bRR(176,203), s:bRR(52,68), l:bRR(44,56)},
+  };
+  kinds.forEach((kind,i)=>{
+    const K=BUG_KINDS[kind];
+    const a=(i/kinds.length)*TAU;
+    BUGS.push({
+      kind, K, col:COL[kind],
+      x:cx+Math.cos(a)*220*S, y:mouthY-260*S+Math.sin(a)*120*S,
+      vx:0, vy:0,
+      size:bRR(K.size[0],K.size[1])*clamp(S,.75,1.5),
+      tx:cx, ty:mouthY-260*S,
+      mode:'wander', rest:0, interest:0, orbit:a, phase:bR()*TAU,
+      flap:bR()*TAU, heading:a, rect:null,
+    });
+  });
+}
+// somewhere worth visiting: a flower head, else anywhere in the crown
+function bugTarget(b){
+  const {S,cx,mouthY}=layout();
+  const blooms=SCENE.items.filter(i=>i.kind==='bloom');
+  if(blooms.length && bChance(.78)){
+    const f=bPick(blooms);
+    const g=itemGeom(f,S,cx,mouthY);
+    const a=bR()*TAU, r=g.r*rr(0.15,0.55);
+    return {x:g.x+Math.cos(a)*r, y:g.y+Math.sin(a)*r};
+  }
+  const a=bRR(-1.2,1.2), rad=bRR(0.3,1)*SPREAD;
+  return {x:cx+Math.sin(a)*rad*S, y:mouthY-(Math.cos(a)*rad*0.86+LIFT)*S};
+}
+function updateBug(b,dt,now){
+  const K=b.K, S=layout().S;
+  // A cursor only interests them while it is actually moving; a parked one
+  // becomes scenery.
+  const mouseLive = (now-MOUSE.moved) < 2500;
+  const dmx=MOUSE.x-b.x, dmy=MOUSE.y-b.y;
+  const dm=Math.hypot(dmx,dmy);
+  if(mouseLive && dm < 190*clamp(S,.75,1.4)){
+    b.mode='chase';
+    b.interest=Math.max(b.interest, 2.6+bR()*2.2);
+  }
+  if(b.mode==='chase'){
+    b.interest-=dt;
+    if(b.interest<=0 || !mouseLive){ b.mode='wander'; b.rest=0; b.tx=null; }
+    else{
+      // circle the cursor rather than sitting on it, each on its own phase
+      b.orbit += dt*(b.kind==='dragonfly'?2.4:b.kind==='bee'?1.9:1.2);
+      const ring=(b.kind==='butterfly'?34:24)*clamp(S,.75,1.4);
+      b.tx=MOUSE.x+Math.cos(b.orbit)*ring;
+      b.ty=MOUSE.y+Math.sin(b.orbit)*ring*0.7;
+    }
+  }
+  if(b.mode!=='chase'){
+    if(b.tx===null||b.rest<=0){
+      const t=bugTarget(b); b.tx=t.x; b.ty=t.y;
+      b.rest=bRR(K.hover[0],K.hover[1])+2;
+    }
+    b.rest-=dt;
+    if(Math.hypot(b.tx-b.x,b.ty-b.y)<6*S) b.rest=Math.min(b.rest,bRR(K.hover[0],K.hover[1]));
+  }
+  // steer toward the target, with a little wander so paths are not straight
+  b.phase+=dt*(2+K.jitter);
+  const cruise=lerp(K.cruise[0],K.cruise[1],0.5+0.5*Math.sin(b.phase*0.4))*clamp(S,.75,1.4);
+  let dx=b.tx-b.x, dy=b.ty-b.y;
+  const d=Math.hypot(dx,dy)||1;
+  const slow=b.mode==='chase'?1:clamp(d/(70*S),0.25,1);
+  let ax=(dx/d)*cruise*slow-b.vx, ay=(dy/d)*cruise*slow-b.vy;
+  const wob=K.jitter*38*clamp(S,.75,1.4);
+  ax+=Math.sin(b.phase*1.7+b.orbit)*wob;
+  ay+=Math.cos(b.phase*2.3)*wob*(b.kind==='butterfly'?1.9:0.7);
+  const am=Math.hypot(ax,ay)||1, cap=K.accel*clamp(S,.75,1.4);
+  if(am>cap){ ax=ax/am*cap; ay=ay/am*cap; }
+  b.vx+=ax*dt; b.vy+=ay*dt;
+  const sp=Math.hypot(b.vx,b.vy), max=cruise*1.5;
+  if(sp>max){ b.vx=b.vx/sp*max; b.vy=b.vy/sp*max; }
+  b.x+=b.vx*dt; b.y+=b.vy*dt;
+  if(sp>4) b.heading=lerp(b.heading, Math.atan2(b.vy,b.vx), clamp(dt*9,0,1));
+  b.flap+=dt*K.wing;
+  // keep them on screen
+  const m=30;
+  if(b.x<m||b.x>W-m||b.y<m||b.y>H-m){
+    b.x=clamp(b.x,m,W-m); b.y=clamp(b.y,m,H-m);
+    b.vx*=-0.4; b.vy*=-0.4; if(b.mode!=='chase') b.tx=null;
+  }
+}
+
+function bugRect(b){
+  const r=b.size*2.6+4;
+  return {x:Math.floor(b.x-r), y:Math.floor(b.y-r), w:Math.ceil(r*2), h:Math.ceil(r*2)};
+}
+/* All three are drawn from above with +x forward. At their real size they are
+   only a dozen pixels, so these are silhouettes first: wings stay translucent
+   and the body carries the shape. */
+function drawBee(s,flap){
+  const beat=Math.sin(flap);
+  // wings: a blurred pair each side, since a bee's beat is far too fast to see
+  ctx.fillStyle='rgba(226,238,255,.30)';
+  for(const side of [-1,1]){
+    for(const [dx,sw] of [[s*0.16,0.0],[-s*0.06,0.22]]){
+      ctx.save();
+      ctx.translate(dx,0);
+      ctx.rotate(side*(0.30+sw+beat*0.26));
+      ctx.beginPath(); ctx.ellipse(0,side*s*0.60,s*0.20,s*0.62,0,0,TAU); ctx.fill();
+      ctx.restore();
+    }
+  }
+  ctx.fillStyle='#eaa72a';                                   // striped abdomen
+  ctx.beginPath(); ctx.ellipse(-s*0.34,0,s*0.66,s*0.40,0,0,TAU); ctx.fill();
+  ctx.fillStyle='#221a0e';
+  for(let i=0;i<3;i++){
+    const t=i/2;
+    ctx.beginPath();
+    ctx.ellipse(-s*(0.80-t*0.52),0,s*0.09,s*(0.40-t*0.09),0,0,TAU); ctx.fill();
+  }
+  ctx.fillStyle='#4a3717';                                   // fuzzy thorax
+  ctx.beginPath(); ctx.arc(s*0.30,0,s*0.34,0,TAU); ctx.fill();
+  ctx.fillStyle='#2b2011';
+  ctx.beginPath(); ctx.arc(s*0.28,0,s*0.22,0,TAU); ctx.fill();
+  ctx.fillStyle='#140f07';                                   // head
+  ctx.beginPath(); ctx.arc(s*0.68,0,s*0.23,0,TAU); ctx.fill();
+  ctx.strokeStyle='#140f07'; ctx.lineWidth=Math.max(.4,s*0.05); ctx.lineCap='round';
+  ctx.beginPath();
+  ctx.moveTo(s*0.80,-s*0.10); ctx.lineTo(s*1.06,-s*0.26);
+  ctx.moveTo(s*0.80, s*0.10); ctx.lineTo(s*1.06, s*0.26);
+  ctx.stroke();
+}
+function drawButterfly(s,flap,col){
+  // seen from above: wings spread either side of the body and close by
+  // foreshortening across the body axis
+  const open=0.26+0.74*Math.abs(Math.sin(flap));
+  const edge=hsl(col.h,Math.min(92,col.s+10),Math.max(18,col.l-30));
+  for(const side of [-1,1]){
+    ctx.save();
+    ctx.scale(1,side*open);
+    const g=ctx.createLinearGradient(s*0.3,0,-s*0.3,s*0.95);
+    g.addColorStop(0,hsl(col.h,col.s,Math.min(94,col.l+20)));
+    g.addColorStop(1,hsl(col.h,Math.min(92,col.s+6),Math.max(24,col.l-10)));
+    ctx.fillStyle=g;
+    ctx.beginPath();                                          // forewing
+    ctx.moveTo(s*0.16,0);
+    ctx.bezierCurveTo(s*0.92,s*0.12, s*0.78,s*1.02, s*0.04,s*0.60);
+    ctx.bezierCurveTo(-s*0.04,s*0.40, s*0.02,s*0.12, s*0.16,0);
+    ctx.fill();
+    ctx.beginPath();                                          // hindwing
+    ctx.moveTo(s*0.02,s*0.16);
+    ctx.bezierCurveTo(-s*0.52,s*0.30, -s*0.62,s*0.92, -s*0.04,s*0.70);
+    ctx.bezierCurveTo(s*0.08,s*0.52, s*0.06,s*0.30, s*0.02,s*0.16);
+    ctx.fill();
+    ctx.strokeStyle=edge; ctx.lineWidth=Math.max(.45,s*0.05);
+    ctx.beginPath();
+    ctx.moveTo(s*0.16,0);
+    ctx.bezierCurveTo(s*0.92,s*0.12, s*0.78,s*1.02, s*0.04,s*0.60);
+    ctx.stroke();
+    ctx.fillStyle=hsl(col.h,18,95,.8);                        // eyespots
+    ctx.beginPath(); ctx.arc(s*0.40,s*0.44,s*0.10,0,TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(-s*0.22,s*0.60,s*0.07,0,TAU); ctx.fill();
+    ctx.restore();
+  }
+  ctx.fillStyle='#221b15';                                    // body
+  ctx.beginPath(); ctx.ellipse(-s*0.06,0,s*0.40,s*0.095,0,0,TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(s*0.34,0,s*0.12,0,TAU); ctx.fill();
+  ctx.strokeStyle='#221b15'; ctx.lineWidth=Math.max(.35,s*0.045); ctx.lineCap='round';
+  ctx.beginPath();
+  ctx.moveTo(s*0.40,-s*0.05); ctx.quadraticCurveTo(s*0.72,-s*0.16,s*0.80,-s*0.34);
+  ctx.moveTo(s*0.40, s*0.05); ctx.quadraticCurveTo(s*0.72, s*0.16,s*0.80, s*0.34);
+  ctx.stroke();
+}
+function drawDragonfly(s,flap,col){
+  // two pairs of long glassy wings, beating out of phase as they really do
+  const beat=Math.sin(flap), beat2=Math.sin(flap+2.1);
+  for(const side of [-1,1]){
+    for(const [off,bt,len] of [[s*0.20,beat,1.18],[-s*0.10,beat2,1.02]]){
+      ctx.save();
+      ctx.translate(off,0);
+      ctx.rotate(side*(0.06+bt*0.20));
+      const wg=ctx.createLinearGradient(0,0,0,side*s*len);
+      wg.addColorStop(0,'rgba(214,236,255,.34)');
+      wg.addColorStop(1,'rgba(190,220,255,.10)');
+      ctx.fillStyle=wg;
+      ctx.beginPath(); ctx.ellipse(0,side*s*len*0.5,s*0.135,s*len*0.5,0,0,TAU); ctx.fill();
+      ctx.strokeStyle='rgba(228,244,255,.28)'; ctx.lineWidth=Math.max(.3,s*0.028);
+      ctx.beginPath(); ctx.ellipse(0,side*s*len*0.5,s*0.135,s*len*0.5,0,0,TAU); ctx.stroke();
+      ctx.restore();
+    }
+  }
+  const g=ctx.createLinearGradient(s*0.4,0,-s*1.5,0);          // long slender abdomen
+  g.addColorStop(0,hsl(col.h,68,56)); g.addColorStop(0.55,hsl(col.h+8,58,42));
+  g.addColorStop(1,hsl(col.h+16,44,26));
+  ctx.fillStyle=g;
+  ctx.beginPath();
+  ctx.moveTo(s*0.30,-s*0.135);
+  ctx.quadraticCurveTo(-s*0.7,-s*0.075, -s*1.50,-s*0.030);
+  ctx.lineTo(-s*1.50, s*0.030);
+  ctx.quadraticCurveTo(-s*0.7, s*0.075, s*0.30, s*0.135);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle=hsl(col.h+10,40,20,.5); ctx.lineWidth=Math.max(.3,s*0.03);
+  ctx.beginPath();
+  for(let i=1;i<=5;i++){ const x=-s*(0.1+i*0.26), hh=s*(0.11-i*0.014);
+    ctx.moveTo(x,-hh); ctx.lineTo(x,hh); }
+  ctx.stroke();
+  ctx.fillStyle=hsl(col.h,58,44);                             // thorax
+  ctx.beginPath(); ctx.ellipse(s*0.26,0,s*0.30,s*0.20,0,0,TAU); ctx.fill();
+  ctx.fillStyle='#0e1c26';                                    // big compound eyes
+  ctx.beginPath(); ctx.arc(s*0.62,-s*0.10,s*0.19,0,TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(s*0.62, s*0.10,s*0.19,0,TAU); ctx.fill();
+  ctx.fillStyle='rgba(150,205,235,.5)';
+  ctx.beginPath(); ctx.arc(s*0.68,-s*0.13,s*0.06,0,TAU); ctx.fill();
+}
+function drawBug(b){
+  ctx.save();
+  ctx.translate(b.x,b.y);
+  ctx.rotate(b.heading);                        // all three are drawn nose-first
+  if(b.kind==='bee')            drawBee(b.size,b.flap);
+  else if(b.kind==='butterfly') drawButterfly(b.size,b.flap,b.col);
+  else                          drawDragonfly(b.size,b.flap,b.col);
+  ctx.restore();
+}
+function restoreRect(r){
+  if(!SETTLED||!r) return;
+  const x=clamp(r.x,0,W), y=clamp(r.y,0,H);
+  const w=clamp(r.w,0,W-x), h=clamp(r.h,0,H-y);
+  if(w<=0||h<=0) return;
+  ctx.drawImage(SETTLED, x*DPR,y*DPR,w*DPR,h*DPR, x,y,w,h);
+}
+function bugFrame(now){
+  if(!SETTLED||!BUGS.length||ARRANGING||document.hidden){ bugRAF=null; return; }
+  const dt=Math.min(0.05,(now-bugLast)/1000||0.016);
+  bugLast=now;
+  for(const b of BUGS) restoreRect(b.rect);     // lift them off the bouquet
+  for(const b of BUGS){ updateBug(b,dt,now); b.rect=bugRect(b); }
+  for(const b of BUGS) drawBug(b);
+  bugRAF=requestAnimationFrame(bugFrame);
+}
+function startBugs(){
+  if(bugRAF||!SETTLED||!BUGS.length||ARRANGING) return;
+  bugLast=performance.now();
+  bugRAF=requestAnimationFrame(bugFrame);
+}
+function stopBugs(){
+  if(bugRAF){ cancelAnimationFrame(bugRAF); bugRAF=null; }
+  for(const b of BUGS) b.rect=null;
+}
+// capture the finished bouquet so the insects have something to fly over.
+// The stamp guards against reusing a stale capture: restoring dirty rects from
+// the wrong bouquet would quietly erase the new one, a pixel at a time.
+let settledStamp='';
+function sceneStamp(){
+  return SCENE ? [CURRENT_SEED,SCENE.vase,SCENE.items.length,W,H,DPR].join('|') : '';
+}
+function captureSettled(){
+  const st=sceneStamp();
+  if(SETTLED && settledStamp===st) return;
+  if(ARRANGING||BUG_COUNT<=0){ SETTLED=null; return; }
+  try{
+    const c=document.createElement('canvas');
+    c.width=canvas.width; c.height=canvas.height;
+    c.getContext('2d').drawImage(canvas,0,0);
+    SETTLED=c; settledStamp=st;
+    if(!BUGS.length) spawnBugs();
+    startBugs();
+  }catch(_){ SETTLED=null; }
+}
+function invalidateSettled(){ SETTLED=null; settledStamp=''; stopBugs(); }
+addEventListener('pointermove',e=>{
+  MOUSE.x=e.clientX; MOUSE.y=e.clientY; MOUSE.moved=performance.now();
+},{passive:true});
+addEventListener('visibilitychange',()=>{ if(document.hidden) stopBugs(); else startBugs(); });
 
 /* ============================================================================
    INTERACTION — pick, drag, turn
@@ -1723,6 +2032,7 @@ function setArranging(on){
   studio.classList.toggle('open',on);
   document.getElementById('make').classList.toggle('on',on);
   if(on){
+    invalidateSettled();          // insects would only get in the way of editing
     buildVaseGrid(); syncSelectionUI(); refreshLayerList();
     hint('Click anything to select · drag to move · grip to turn',5000);
   }else{
@@ -1818,6 +2128,13 @@ addEventListener('keydown',e=>{
   if(e.code==='Space'){e.preventDefault();regen();}
   else if(e.key==='s'||e.key==='S'){document.getElementById('save').click();}
   else if(e.key==='e'||e.key==='E'){setArranging(!ARRANGING);}
+  else if(e.key==='b'||e.key==='B'){
+    BUG_COUNT=BUG_COUNT>0?0:3;
+    stopBugs(); BUGS=[]; invalidateSettled();
+    if(BUG_COUNT>0) hint('Pollinators on — a moving cursor distracts them',3000);
+    else hint('Pollinators off',2000);
+    repaint();
+  }
   else if(ARRANGING&&SELECTED>=0){
     const it=SCENE.items[SELECTED]; if(!it) return;
     if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();deleteSelected();}
@@ -1867,6 +2184,11 @@ window.wallpaperPropertyListener={
     if(p.fullness){ FULLNESS=clamp(p.fullness.value/100,0.4,1.6); rebuild=true; }
     if(p.showplacard) document.body.classList.toggle('no-placard',!p.showplacard.value);
     if(p.motion) MOTION=!!p.motion.value;
+    if(p.pollinators){
+      BUG_COUNT=clamp(p.pollinators.value|0,0,3);
+      stopBugs(); BUGS=[];
+      if(BUG_COUNT>0){ spawnBugs(); startBugs(); } else invalidateSettled();
+    }
     if(rebuild) regen();
   },
 };
