@@ -67,9 +67,12 @@ They work the bouquet on their own errands — visiting flower heads, hovering, 
 on. Each flies in character: the bee darts and fusses, the butterfly drifts and bobs,
 the dragonfly holds still then crosses the frame in a blink.
 
-Move your cursor near one and it gets distracted, breaking off to circle the pointer
-until it loses interest and goes back to the flowers. A *stationary* cursor is ignored —
-it has to be moving to be worth chasing, so a parked mouse doesn't hold them hostage.
+Move your cursor near one and it locks on, then travels with you — flying at the cursor's
+own speed rather than chasing the spot it just left, and holding a loose station off to
+one side. Nothing times out: it keeps company for as long as it can physically hold on,
+and you break the lock by outrunning it. Amble and all three stay with you; move briskly
+and the butterfly drops away; swipe hard and you shake the lot. A *stationary* cursor is
+ignored, so a parked mouse doesn't hold them hostage.
 
 They cost almost nothing. The settled bouquet is captured once and each frame repaints
 only the small square around each insect from that capture — around 1.6% of the screen,

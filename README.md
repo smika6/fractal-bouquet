@@ -113,9 +113,15 @@ python -m http.server 8000
 
 A bee, a butterfly and a dragonfly work the bouquet, each flying in character — the bee
 darts and fusses, the butterfly drifts, the dragonfly hangs still and then crosses the
-frame in a blink. Move the cursor near one and it gets distracted, breaking off to circle
-the pointer until it loses interest. A stationary cursor is ignored; it has to be moving
-to be worth chasing. Press `b` to send them away.
+frame in a blink. Press `b` to send them away.
+
+Move the cursor near one and it locks on, then **travels with you** — it flies at the
+cursor's own speed rather than chasing the spot it just left, holding a loose station off
+to one side. Nothing times out: it keeps company for as long as it can physically hold on,
+and you break the lock by **outrunning it**. Amble and all three stay with you; move
+briskly and the butterfly drops away; swipe hard and you shake the lot. Which one you can
+lose falls out of their real top speeds rather than any rule — the dragonfly is very hard
+to leave behind, and if you flick and then stop, it simply catches up again.
 
 They are close to free. The settled bouquet is captured once, and each frame repaints only
 the small square around each insect out of that capture — about 1.6% of the screen and

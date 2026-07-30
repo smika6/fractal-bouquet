@@ -1367,13 +1367,16 @@ function paintNow(){                       // one repaint per frame while draggi
    desktop.
    ========================================================================== */
 let SETTLED=null, BUGS=[], bugRAF=null, bugLast=0, BUG_COUNT=3;
+// cursor velocity, so a locked-on insect can travel with the pointer rather
+// than forever chasing the place it just left
+let MOUSE_T=0;
 // insects roam on their own randomness — drawing from the seeded stream would
 // make the bouquet's own geometry depend on where a bee happened to fly
 const bR=()=>Math.random();
 const bRR=(a,b)=>a+(b-a)*Math.random();
 const bPick=a=>a[Math.floor(Math.random()*a.length)];
 const bChance=p=>Math.random()<p;
-const MOUSE={x:-1e5,y:-1e5,moved:0};
+const MOUSE={x:-1e5,y:-1e5,vx:0,vy:0,moved:0};
 
 const BUG_KINDS={
   bee:      {size:[13,16],    cruise:[95,150],  accel:1400, jitter:1.5, hover:[.35,1.1], wing:52},
@@ -1402,8 +1405,12 @@ function spawnBugs(){
       vx:0, vy:0,
       size:bRR(K.size[0],K.size[1])*clamp(S,.75,1.5),
       tx:cx, ty:mouthY-260*S,
-      mode:'wander', rest:0, interest:0, orbit:a, phase:bR()*TAU,
+      mode:'wander', rest:0, interest:0, slip:0, orbit:a, phase:bR()*TAU,
       flap:bR()*TAU, heading:a, rect:null,
+      // how far it will let the cursor get before losing the lock, scaled to
+      // its own top speed: the slow butterfly is shaken off easily, the
+      // dragonfly is nearly impossible to lose
+      leash:clamp(K.cruise[1]*1.95*1.35, 150, 470)*clamp(S,.75,1.4),
     });
   });
 }
@@ -1427,15 +1434,20 @@ function updateBug(b,dt,now){
   const mouseLive = (now-MOUSE.moved) < 2500;
   const dmx=MOUSE.x-b.x, dmy=MOUSE.y-b.y;
   const dm=Math.hypot(dmx,dmy);
-  if(mouseLive && dm < 190*clamp(S,.75,1.4)){
-    b.mode='chase';
-    b.interest=Math.max(b.interest, 2.6+bR()*2.2);
+  if(mouseLive && dm < 190*clamp(S,.75,1.4) && b.mode!=='chase'){
+    b.mode='chase'; b.slip=0;
   }
   if(b.mode==='chase'){
-    b.interest-=dt;
-    if(b.interest<=0 || !mouseLive){ b.mode='wander'; b.rest=0; b.tx=null; }
+    // Once locked they keep station for as long as they can hold it. The lock
+    // is broken by outrunning them, not by a timer: drag the cursor gently and
+    // they stay with you, flick it away and they are left behind. Which of
+    // them you can shake falls out of their own top speeds — the butterfly
+    // gives up early, the dragonfly is very hard to lose.
+    const overLeash = dm > b.leash;
+    b.slip = overLeash ? b.slip+dt : Math.max(0,b.slip-dt*1.6);
+    if(b.slip>0.38 || !mouseLive){ b.mode='wander'; b.slip=0; b.rest=0; b.tx=null; }
     else{
-      // circle the cursor rather than sitting on it, each on its own phase
+      // hold a loose station off the cursor, each on its own phase
       b.orbit += dt*(b.kind==='dragonfly'?2.4:b.kind==='bee'?1.9:1.2);
       const ring=(b.kind==='butterfly'?34:24)*clamp(S,.75,1.4);
       b.tx=MOUSE.x+Math.cos(b.orbit)*ring;
@@ -1455,15 +1467,29 @@ function updateBug(b,dt,now){
   const cruise=lerp(K.cruise[0],K.cruise[1],0.5+0.5*Math.sin(b.phase*0.4))*clamp(S,.75,1.4);
   let dx=b.tx-b.x, dy=b.ty-b.y;
   const d=Math.hypot(dx,dy)||1;
-  const slow=b.mode==='chase'?1:clamp(d/(70*S),0.25,1);
-  let ax=(dx/d)*cruise*slow-b.vx, ay=(dy/d)*cruise*slow-b.vy;
+  let wantX, wantY;
+  if(b.mode==='chase'){
+    // travel WITH the cursor — its own velocity, plus just enough correction
+    // to close on the station point. Chasing the point alone always reads as
+    // lagging behind; matching the velocity reads as keeping company.
+    const close=Math.min(d*3.4,cruise*1.1);
+    wantX=MOUSE.vx+(dx/d)*close;
+    wantY=MOUSE.vy+(dy/d)*close;
+  }else{
+    const slow=clamp(d/(70*S),0.25,1);
+    wantX=(dx/d)*cruise*slow;
+    wantY=(dy/d)*cruise*slow;
+  }
+  let ax=wantX-b.vx, ay=wantY-b.vy;
   const wob=K.jitter*38*clamp(S,.75,1.4);
   ax+=Math.sin(b.phase*1.7+b.orbit)*wob;
   ay+=Math.cos(b.phase*2.3)*wob*(b.kind==='butterfly'?1.9:0.7);
   const am=Math.hypot(ax,ay)||1, cap=K.accel*clamp(S,.75,1.4);
   if(am>cap){ ax=ax/am*cap; ay=ay/am*cap; }
   b.vx+=ax*dt; b.vy+=ay*dt;
-  const sp=Math.hypot(b.vx,b.vy), max=cruise*1.5;
+  // a burst while locked on, but a hard ceiling — this is what makes a fast
+  // enough flick genuinely lose them
+  const sp=Math.hypot(b.vx,b.vy), max=cruise*(b.mode==='chase'?1.95:1.5);
   if(sp>max){ b.vx=b.vx/sp*max; b.vy=b.vy/sp*max; }
   b.x+=b.vx*dt; b.y+=b.vy*dt;
   if(sp>4) b.heading=lerp(b.heading, Math.atan2(b.vy,b.vx), clamp(dt*9,0,1));
@@ -1618,6 +1644,8 @@ function bugFrame(now){
   if(!SETTLED||!BUGS.length||ARRANGING||document.hidden){ bugRAF=null; return; }
   const dt=Math.min(0.05,(now-bugLast)/1000||0.016);
   bugLast=now;
+  // a cursor that has stopped is no longer carrying them anywhere
+  if(now-MOUSE.moved>90){ MOUSE.vx*=0.80; MOUSE.vy*=0.80; }
   for(const b of BUGS) restoreRect(b.rect);     // lift them off the bouquet
   for(const b of BUGS){ updateBug(b,dt,now); b.rect=bugRect(b); }
   for(const b of BUGS) drawBug(b);
@@ -1657,7 +1685,14 @@ function captureSettled(){
 }
 function invalidateSettled(){ SETTLED=null; settledStamp=''; stopBugs(); }
 addEventListener('pointermove',e=>{
-  MOUSE.x=e.clientX; MOUSE.y=e.clientY; MOUSE.moved=performance.now();
+  const now=performance.now(), dt=(now-MOUSE_T)/1000;
+  if(dt>0.004 && dt<0.2){
+    // smoothed, so a jittery mouse does not read as a violent yank
+    MOUSE.vx=lerp(MOUSE.vx,(e.clientX-MOUSE.x)/dt,0.4);
+    MOUSE.vy=lerp(MOUSE.vy,(e.clientY-MOUSE.y)/dt,0.4);
+  }
+  MOUSE_T=now;
+  MOUSE.x=e.clientX; MOUSE.y=e.clientY; MOUSE.moved=now;
 },{passive:true});
 addEventListener('visibilitychange',()=>{ if(document.hidden) stopBugs(); else startBugs(); });
 
@@ -2142,7 +2177,7 @@ addEventListener('keydown',e=>{
   else if(e.key==='b'||e.key==='B'){
     BUG_COUNT=BUG_COUNT>0?0:3;
     stopBugs(); BUGS=[]; invalidateSettled();
-    if(BUG_COUNT>0) hint('Pollinators on — a moving cursor distracts them',3000);
+    if(BUG_COUNT>0) hint('Pollinators on — they follow the cursor until you shake them',3400);
     else hint('Pollinators off',2000);
     repaint();
   }
