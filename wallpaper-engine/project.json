@@ -1,6 +1,6 @@
 {
   "title": "Generative Still Life",
-  "description": "A fractal bouquet that arranges itself anew on a timer. Flowers are grown from botanical primitives — recursive ferns, golden-angle petal spirals, phyllotaxis seed discs — and gathered into a vessel of your choosing.",
+  "description": "A fractal bouquet that arranges itself anew on a timer. Twenty-one flowers are grown from botanical primitives — recursive ferns, golden-angle petal spirals, phyllotaxis seed discs, umbels of umbels — and gathered into a vessel of your choosing, with ivy over the rim and pollinators at work.",
   "type": "web",
   "file": "index.html",
   "preview": "preview.jpg",
@@ -58,11 +58,11 @@
       },
       "pollinators": {
         "order": 6,
-        "text": "Pollinators (bee, butterfly, dragonfly)",
+        "text": "Pollinators (bee, butterfly, dragonfly, hummingbird, ladybird)",
         "type": "slider",
-        "value": 3,
+        "value": 5,
         "min": 0,
-        "max": 3,
+        "max": 5,
         "step": 1
       }
     }

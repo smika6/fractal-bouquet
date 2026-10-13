@@ -59,24 +59,27 @@ it well clear of the usual review friction around web wallpapers fetching remote
 | Fullness | 100 | Flowers per bouquet, from a sparse handful to a crowded one. |
 | Show the gallery placard | on | The museum label naming what bloomed. |
 | Animate each new bouquet | on | Off swaps bouquets instantly, with no reveal. |
-| Pollinators | 3 | A bee, a butterfly and a dragonfly, in that order. 0 for none. |
+| Pollinators | 5 | A bee, a butterfly, a dragonfly, a hummingbird and a ladybird, in that order. 0 for none. |
 
 ### The pollinators
 
 They work the bouquet on their own errands — visiting flower heads, hovering, moving
 on. Each flies in character: the bee darts and fusses, the butterfly drifts and bobs,
-the dragonfly holds still then crosses the frame in a blink.
+the dragonfly holds still then crosses the frame in a blink. Bees and butterflies settle
+on flowers for a while; the hummingbird hovers with its bill in the spikes and trumpets;
+the ladybird walks the petals and only flies off when it has had enough, or when the
+cursor comes too close.
 
 Move your cursor near one and it locks on, then travels with you — flying at the cursor's
 own speed rather than chasing the spot it just left, and holding a loose station off to
 one side. Nothing times out: it keeps company for as long as it can physically hold on,
-and you break the lock by outrunning it. Amble and all three stay with you; move briskly
+and you break the lock by outrunning it. Amble and the fliers stay with you; move briskly
 and the butterfly drops away; swipe hard and you shake the lot. A *stationary* cursor is
 ignored, so a parked mouse doesn't hold them hostage.
 
 They cost almost nothing. The settled bouquet is captured once and each frame repaints
-only the small square around each insect from that capture — around 1.6% of the screen,
-roughly 0.1ms a frame, against 15ms to redraw the arrangement. The flowers themselves
+only the small square around each insect from that capture — around 2% of the screen,
+roughly 0.1ms a frame, against 15–20ms to redraw the arrangement. The flowers themselves
 are never redrawn while the insects fly.
 
 ## Notes on the port
