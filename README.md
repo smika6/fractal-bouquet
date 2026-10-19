@@ -143,6 +143,31 @@ Larger saves are painted fresh at that size rather than scaled up from the scree
 fronds are drawn as vectors for them instead of from their screen-resolution sprites.
 The gallery lives in this browser's storage, with a small picture of each bouquet.
 
+## In the round (v3, in progress)
+
+[`v3/`](v3/) is the same still life built in 3D with WebGL — **[see it →](https://smika6.github.io/fractal-bouquet/v3/)**.
+The palette, the colour rules, the cultivar names on the placard and the seeds all
+carry over; only the drawing changes. It is early: roses, tulips, lilies and gerberas
+with ferns and gypsophila so far, and the rest of the cast is still to come over.
+
+- **The vases are the same profiles, turned on a lathe.** Glass shows the stems through
+  real water.
+- **The petal is still one shape with a bluntness control**, now as a surface that can
+  also stand up, curl back and cup. A rose's golden-angle whorls actually close round
+  its centre; a tulip is a real goblet; a lily's tepals really recurve.
+- **The blooms sit on a Fibonacci spiral over a dome** — the golden angle again, one
+  scale up — so the bouquet is full from every side the table turns to. Ferns are the
+  same bipinnate recursion, arching under their own weight.
+- **The table turns slowly and the view follows the cursor.** `t` holds it still.
+- **It only renders while something moves.** The whole bouquet is merged into a few
+  meshes, so a frame is under a millisecond on a desktop GPU; with the table held
+  still and the cursor parked, it renders nothing at all.
+
+It loads a pinned copy of [three.js](https://threejs.org) r159 (MIT,
+[`v3/three.LICENSE`](v3/three.LICENSE)) from the same folder — still nothing from the
+network. r159 is the last release with a classic, non-module build, which matters
+because a wallpaper is loaded from disk.
+
 ## As a desktop wallpaper
 
 There is a [Wallpaper Engine build](wallpaper-engine/) in this repo. Wallpaper Engine's

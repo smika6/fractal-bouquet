@@ -1,0 +1,1078 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Generative Still Life — in the round</title>
+<style>
+  :root{
+    --ground:#16130f; --ink:#ede6d6; --muted:#9a9081; --accent:#c9a24b; --line:#3a342c;
+    --serif:"Palatino Linotype","Book Antiqua",Palatino,"Iowan Old Style",Georgia,"Times New Roman",serif;
+    --sans:ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:var(--serif); overflow:hidden; -webkit-font-smoothing:antialiased;
+  }
+  #stage{position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none}
+  /* the bouquet that was there, dissolving as the new one opens */
+  #fade{position:fixed; inset:0; width:100%; height:100%; pointer-events:none; opacity:0; z-index:2}
+  #fade.out{transition:opacity .55s ease}
+
+  .placard{
+    position:fixed; left:clamp(16px,3.2vw,44px); bottom:clamp(16px,3.4vh,40px);
+    max-width:min(74vw,400px); z-index:5; pointer-events:none;
+    text-shadow:0 1px 10px rgba(0,0,0,.55);
+    animation:rise 1.1s .4s both cubic-bezier(.2,.7,.2,1);
+  }
+  .placard::before{
+    content:""; position:absolute; inset:-46px -110px -70px -70px; z-index:-1;
+    background:radial-gradient(115% 105% at 0% 100%,
+      rgba(9,7,5,.86) 0%, rgba(9,7,5,.62) 42%, rgba(9,7,5,.22) 66%, rgba(9,7,5,0) 80%);
+  }
+  .eyebrow{
+    font-family:var(--sans); font-size:11px; letter-spacing:.34em; text-transform:uppercase;
+    color:var(--accent); margin:0 0 .5em; font-weight:600; display:flex; align-items:center; gap:.7em;
+  }
+  .eyebrow::before{content:""; width:26px; height:1px; background:linear-gradient(90deg,var(--accent),transparent)}
+  .title{font-size:clamp(21px,3.1vw,33px); line-height:1.07; margin:0; font-style:italic; font-weight:500; text-wrap:balance}
+  .species{font-family:var(--sans); font-size:12.5px; color:var(--muted); margin:.7em 0 0; line-height:1.5}
+  .meta{
+    font-family:var(--sans); font-size:10.5px; letter-spacing:.22em; text-transform:uppercase;
+    color:var(--muted); margin:.65em 0 0; font-variant-numeric:tabular-nums;
+    display:flex; gap:.8em; align-items:center; flex-wrap:wrap;
+  }
+  .meta b{color:var(--ink); font-weight:600}
+  .meta i{width:4px;height:4px;border-radius:50%;background:var(--line);font-style:normal}
+
+  .controls{
+    position:fixed; right:clamp(14px,3vw,34px); bottom:clamp(16px,3.4vh,40px);
+    z-index:6; display:flex; gap:9px; align-items:center; flex-wrap:wrap; justify-content:flex-end;
+    animation:rise 1.1s .55s both cubic-bezier(.2,.7,.2,1);
+  }
+  button,.btn{
+    font-family:var(--sans); font-size:11.5px; letter-spacing:.13em; text-transform:uppercase;
+    color:var(--ink); background:rgba(30,26,20,.62); border:1px solid var(--line);
+    padding:10px 15px; border-radius:999px; cursor:pointer; text-decoration:none;
+    backdrop-filter:blur(7px); -webkit-backdrop-filter:blur(7px);
+    display:inline-flex; align-items:center; gap:.55em; transition:.2s ease;
+  }
+  button:hover,.btn:hover{border-color:var(--accent); color:#fff; background:rgba(48,40,28,.7)}
+  button:focus-visible,.btn:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+  button svg,.btn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  button.on{background:var(--accent); border-color:var(--accent); color:#191510; font-weight:600}
+
+  .hint{
+    position:fixed; top:clamp(12px,2.6vh,26px); left:0; right:0; text-align:center; z-index:5;
+    font-family:var(--sans); font-size:10.5px; letter-spacing:.22em; text-transform:uppercase;
+    color:var(--muted); pointer-events:none; opacity:0; transition:opacity .4s;
+  }
+  .hint.show{opacity:.9}
+  .nogl{position:fixed; inset:0; display:none; place-items:center; text-align:center; padding:24px;
+    font-family:var(--sans); color:var(--muted); line-height:1.6}
+  body.no-webgl .nogl{display:grid}
+
+  body.wallpaper .controls, body.wallpaper .hint{display:none}
+  body.wallpaper .placard{animation-delay:.7s}
+  body.no-placard .placard{display:none}
+  @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){ .placard,.controls{animation:none} }
+  @media (max-width:640px){
+    .placard{max-width:64vw; bottom:auto; top:14px}
+    .placard::before{inset:-30px -70px -40px -60px}
+    .controls{bottom:12px}
+    .controls button,.controls .btn{padding:9px 12px}
+  }
+</style>
+
+<canvas id="stage"></canvas>
+<img id="fade" alt="">
+
+<div class="placard">
+  <p class="eyebrow">Generative Still Life · in the round</p>
+  <h1 class="title" id="pTitle">—</h1>
+  <p class="species" id="pSpecies">—</p>
+  <p class="meta"><span>Plate <b id="pSeed">—</b></span><i></i><span id="pScheme">—</span></p>
+</div>
+<div class="hint" id="hint"></div>
+<div class="nogl"><p>This still life needs WebGL, which this browser has switched off.<br>
+  <a class="btn" href="../index.html">See the flat version</a></p></div>
+
+<div class="controls">
+  <a class="btn" id="flat" href="../index.html" title="The original, painted flat">
+    <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 15l3-4 3 3 2-2 2 3"/></svg>
+    Flat
+  </a>
+  <button id="turn" title="Turn the table (t)">
+    <svg viewBox="0 0 24 24"><ellipse cx="12" cy="15" rx="8" ry="3"/><path d="M12 12V4"/><path d="M17 9a7 3 0 0 1 3 2.6"/></svg>
+    Turn
+  </button>
+  <button id="regen" title="New arrangement (space · ← → step through recent)">
+    <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4h-4"/></svg>
+    Regenerate
+  </button>
+  <button id="save" title="Save a PNG (s)">
+    <svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 19h16"/></svg>
+    Save
+  </button>
+</div>
+
+<script src="three.min.js"></script>
+<script>
+"use strict";
+/* ============================================================================
+   GENERATIVE STILL LIFE — in the round
+   The same bouquet logic as the flat version — palette, florist roles, the
+   colours each species really comes in, the placard — built as geometry
+   instead of painted. Petals are bent surfaces, so a rose's golden-angle
+   spiral actually cups round its centre and a tulip is an actual goblet.
+
+   The whole bouquet is merged into three meshes (petals, greenery, glass),
+   so a few thousand petals cost a handful of draw calls. It only renders
+   while something is moving: the turntable, the cursor's parallax, or a new
+   bouquet arriving. Hold it still and it costs nothing.
+   ========================================================================== */
+const T=window.THREE;
+if(!T){ document.body.classList.add('no-webgl'); throw new Error('three.min.js did not load'); }
+
+/* ---------- seeded randomness ---------- */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+let RNG=Math.random;
+const rnd=()=>RNG();
+const rr=(a,b)=>a+(b-a)*RNG();
+const ri=(a,b)=>Math.floor(a+(b-a+1)*RNG());
+const pick=a=>a[Math.floor(RNG()*a.length)];
+const chance=p=>RNG()<p;
+function gauss(m,sd){let u=0,v=0;while(!u)u=RNG();while(!v)v=RNG();return m+sd*Math.sqrt(-2*Math.log(u))*Math.cos(6.283185*v);}
+const TAU=Math.PI*2, GOLD=Math.PI*(3-Math.sqrt(5));
+const clamp=(x,a,b)=>x<a?a:x>b?b:x;
+const lerp=(a,b,t)=>a+(b-a)*t;
+const easeOut=t=>1-Math.pow(1-t,3);
+const easeOutBack=t=>{const c=2.2;t=t-1;return 1+(c+1)*t*t*t+c*t*t;};
+const newSeed=()=>(Math.floor(Math.random()*1e9))>>>0;
+
+/* ============================================================================
+   PALETTE — shared with the flat version
+   ========================================================================== */
+const SCHEMES={
+  'Analogous':   b=>[b,b+22,b-24,b+44],
+  'Monochrome':  b=>[b,b,b,b],
+  'Complementary':b=>[b,b+14,b+180,b+166],
+  'Split':       b=>[b,b+18,b+150,b+210],
+  'Triad':       b=>[b,b+120,b+240,b+18],
+};
+const SCHEME_WEIGHTS=[['Analogous',34],['Monochrome',24],['Complementary',18],['Split',14],['Triad',10]];
+function pickScheme(){
+  let r=rnd()*SCHEME_WEIGHTS.reduce((a,s)=>a+s[1],0);
+  for(const [n,w] of SCHEME_WEIGHTS){ if((r-=w)<=0) return n; }
+  return 'Analogous';
+}
+// hues that actually occur in petals — nothing in the green/teal arc
+const FLORAL_BANDS=[{a:338,b:378},{a:14,b:46},{a:44,b:58},{a:262,b:322},{a:212,b:258}];
+function snapHue(h){
+  h=((h%360)+360)%360;
+  let best=h, bd=1e9;
+  for(const B of FLORAL_BANDS){
+    for(const hh of [h,h+360,h-360]){
+      if(hh>=B.a&&hh<=B.b) return ((hh%360)+360)%360;
+      const da=Math.abs(hh-B.a), db=Math.abs(hh-B.b), d=Math.min(da,db);
+      if(d<bd){ bd=d; best=(da<db?B.a:B.b); }
+    }
+  }
+  return ((best%360)+360)%360;
+}
+function floralColour(h,s,l,warm){
+  h=snapHue(h);
+  if(h>=38&&h<=70) l=Math.max(l,62);
+  return {h, s:clamp(s,8,94), l:clamp(l,20,95), warm:warm??(h<70||h>300)};
+}
+function buildPalette(){
+  const base=snapHue(ri(0,359));
+  const name=pickScheme();
+  const hues=SCHEMES[name](base).map(snapHue);
+  const warm=(base<70||base>300);
+  const vivid=chance(.55);
+  const cultivars=hues.map((h,i)=>{
+    const mono=name==='Monochrome';
+    if(!mono && i===hues.length-1 && chance(.45))
+      return {h, s:clamp(gauss(16,7),6,28), l:clamp(gauss(88,4),80,95)};
+    let sat=mono ? clamp(gauss(50,15),22,80) : clamp(gauss(vivid?64:50,13),26,86);
+    let lit=mono ? clamp(38+i*13,30,84) : clamp(gauss(60,10),40,80);
+    if(h>=206&&h<=260) sat=Math.min(sat,52);
+    if(h>=38&&h<=70)   lit=Math.max(lit,62);
+    return {h, s:sat, l:lit};
+  });
+  const gH=clamp(gauss(warm?108:132,12),92,146);
+  const foliage={h:gH, s:clamp(gauss(28,6),18,38), l:clamp(gauss(25,4),18,32)};
+  const gd=((base+(warm?200:40))%360);
+  return {name, base, warm, vivid, cultivars, foliage,
+    ground:{h:gd, s:clamp(gauss(22,6),10,32), l:clamp(gauss(8,2),5,12)}};
+}
+const inBand=(h,a,b)=>{h=((h%360)+360)%360; return a<=b ? (h>=a&&h<=b) : (h>=a||h<=b);};
+function speciesColour(key,c){
+  return {h:c.h,s:c.s,l:c.l,warm:c.warm??(c.h<70||c.h>300)};
+}
+function hueBand(c){
+  if(c.l>78&&c.s<38) return 'white';
+  const h=((c.h%360)+360)%360;
+  if(h<18||h>=345) return 'red';
+  if(h<48) return 'orange';
+  if(h<70) return 'yellow';
+  if(h<170) return 'green';
+  if(h<255) return 'blue';
+  if(h<300) return 'violet';
+  return 'pink';
+}
+const CULTIVARS={
+  lily:{white:'‘Casa Blanca’ Lily',red:'‘Black Out’ Lily',orange:'Tiger Lily',yellow:'‘Golden Splendour’ Lily',
+    blue:'‘Twilight’ Lily',violet:'‘Purple Prince’ Lily',pink:'‘Stargazer’ Lily'},
+  rose:{white:'‘Iceberg’ Rose',red:'‘Mister Lincoln’ Rose',orange:'‘Lady of Shalott’ Rose',yellow:'‘Graham Thomas’ Rose',
+    blue:'‘Blue Moon’ Rose',violet:'‘Ebb Tide’ Rose',pink:'‘Juliet’ Rose'},
+  tulip:{white:'‘Maureen’ Tulip',red:'‘Kingsblood’ Tulip',orange:'‘Ballerina’ Tulip',yellow:'‘Golden Parade’ Tulip',
+    blue:'‘Bleu Aimable’ Tulip',violet:'‘Queen of Night’ Tulip',pink:'‘Angélique’ Tulip'},
+  daisy:{white:'Marguerite',yellow:'‘Sundance’ Gerbera'},
+};
+
+/* ============================================================================
+   GEOMETRY — everything is merged into a few buffers as it is built
+   A builder carries a transform stack like a 2D canvas does, so the flower
+   code reads the way the flat version's does: rotate, translate, draw a petal.
+   ========================================================================== */
+const _v=new T.Vector3(), _m=new T.Matrix4(), _c=new T.Color();
+// colours are authored in sRGB HSL like the flat version, and stored linear
+function rgb(h,s,l){
+  _c.setHSL((((h%360)+360)%360)/360, clamp(s,0,100)/100, clamp(l,0,100)/100);
+  return [_c.r,_c.g,_c.b];
+}
+const mix3=(a,b,t)=>[lerp(a[0],b[0],t),lerp(a[1],b[1],t),lerp(a[2],b[2],t)];
+class Builder{
+  constructor(){ this.pos=[]; this.col=[]; this.idx=[]; this.m=new T.Matrix4(); this.stack=[]; }
+  push(){ this.stack.push(this.m.clone()); return this; }
+  pop(){ this.m=this.stack.pop(); return this; }
+  apply(mat){ this.m.multiply(mat); return this; }
+  translate(x,y,z){ return this.apply(_m.makeTranslation(x,y,z)); }
+  rotX(a){ return this.apply(_m.makeRotationX(a)); }
+  rotY(a){ return this.apply(_m.makeRotationY(a)); }
+  rotZ(a){ return this.apply(_m.makeRotationZ(a)); }
+  scale(x,y,z){ return this.apply(_m.makeScale(x,y??x,z??x)); }
+  // a grid surface: fn(u,v) gives a point, colFn(u,v) its colour
+  surface(nu,nv,fn,colFn){
+    const base=this.pos.length/3;
+    for(let j=0;j<=nv;j++) for(let i=0;i<=nu;i++){
+      const u=i/nu, v=j/nv, p=fn(u,v,i,j);
+      _v.set(p[0],p[1],p[2]).applyMatrix4(this.m);
+      this.pos.push(_v.x,_v.y,_v.z);
+      const c=colFn(u,v); this.col.push(c[0],c[1],c[2]);
+    }
+    for(let j=0;j<nv;j++) for(let i=0;i<nu;i++){
+      const a=base+j*(nu+1)+i, b=a+1, c=a+nu+1, d=c+1;
+      this.idx.push(a,c,b, b,c,d);
+    }
+  }
+  // a tube along a polyline, with parallel-transported frames so it never twists
+  tube(pts,r0,r1,colFn,radial){
+    radial=radial||6;
+    const n=pts.length, N=[], B=[];
+    const t0=new T.Vector3().subVectors(pts[1],pts[0]).normalize();
+    let nrm=Math.abs(t0.y)<0.9 ? new T.Vector3(0,1,0) : new T.Vector3(1,0,0);
+    nrm.sub(t0.clone().multiplyScalar(nrm.dot(t0))).normalize();
+    for(let i=0;i<n;i++){
+      const tan=new T.Vector3().subVectors(pts[Math.min(n-1,i+1)],pts[Math.max(0,i-1)]).normalize();
+      nrm=nrm.clone().sub(tan.clone().multiplyScalar(nrm.dot(tan))).normalize();
+      N.push(nrm); B.push(new T.Vector3().crossVectors(tan,nrm));
+    }
+    this.surface(radial,n-1,(u,v,i,j)=>{
+      const a=u*TAU, r=lerp(r0,r1,v), P=pts[j], cs=Math.cos(a)*r, sn=Math.sin(a)*r;
+      return [P.x+N[j].x*cs+B[j].x*sn, P.y+N[j].y*cs+B[j].y*sn, P.z+N[j].z*cs+B[j].z*sn];
+    },(u,v)=>colFn(v));
+  }
+  ellipsoid(cx,cy,cz,rx,ry,rz,colFn,nu,nv){
+    this.surface(nu||8,nv||6,(u,v)=>{
+      const th=v*Math.PI, ph=u*TAU;
+      return [cx+rx*Math.sin(th)*Math.cos(ph), cy+ry*Math.cos(th), cz+rz*Math.sin(th)*Math.sin(ph)];
+    },typeof colFn==='function'?colFn:()=>colFn);
+  }
+  geometry(){
+    const g=new T.BufferGeometry();
+    g.setAttribute('position',new T.Float32BufferAttribute(this.pos,3));
+    g.setAttribute('color',new T.Float32BufferAttribute(this.col,3));
+    g.setIndex(this.idx);
+    g.computeVertexNormals();
+    return g;
+  }
+}
+
+/* ---------- the petal ----------
+   One surface for every petal, as in the flat version, with the same
+   bluntness control — plus the three things a flat petal cannot do. It grows
+   along +y from the flower's centre with its face toward +z.
+   lift  — how far it stands up out of the flower's plane
+   curl  — how much more it bends along its length (negative rolls it back)
+   cup   — how much its edges rise toward the face                         */
+function petal(B,L,W,o,shade){
+  const round=o.round??0.6, belly=o.belly??0.5, base=o.base??0.2;
+  const lift=o.lift??0, curl=o.curl??0, cup=o.cup??0.2, twist=o.twist||0;
+  const nu=o.nu||6, nv=o.nv||8;
+  // the spine, finely sampled, so a strongly curled petal bends smoothly
+  const K=48, sy=[0], sz=[0];
+  let a0=lift;
+  for(let k=1;k<=K;k++){
+    const v=k/K, a=lift+curl*v*v, am=(a0+a)/2, ds=L/K;
+    sy.push(sy[k-1]+Math.cos(am)*ds); sz.push(sz[k-1]+Math.sin(am)*ds); a0=a;
+  }
+  const spine=d=>{                                  // point and angle at length d
+    const f=clamp(d/L,0,1)*K, k=Math.min(K-1,Math.floor(f)), r=f-k, v=f/K;
+    return [lerp(sy[k],sy[k+1],r), lerp(sz[k],sz[k+1],r), lift+curl*v*v];
+  };
+  /* The tip is what separates the species. A blunt petal keeps most of its
+     width to the end and finishes on a rounded edge; a pointed one tapers to
+     a point. A blunt petal must never arrive at a point — that is what made
+     the first roses read as spiky. */
+  const capW=round*0.86, q=lerp(1.1,2.6,round), capD=W/2*capW*0.95;
+  const halfW=v=>{
+    if(v<=belly){ const t=v/belly; return W/2*(base+(1-base)*Math.sin(Math.PI/2*t)); }
+    const t=(v-belly)/(1-belly);
+    return W/2*(1-(1-capW)*Math.pow(t,q));
+  };
+  B.surface(nu,nv,(u,v)=>{
+    const s=u*2-1, w=halfW(v), x=s*w;
+    // round the top edge back from the corners, only near the tip
+    const d=v*L - Math.pow(v,5)*capD*(1-Math.sqrt(Math.max(0,1-s*s)));
+    const [py,pz,a]=spine(d);
+    const c=cup*s*s*w;                              // edges rise toward the face
+    const tw=twist*v;
+    return [x*Math.cos(tw), py-Math.sin(a)*c, pz+Math.cos(a)*c+x*Math.sin(tw)*0.3];
+  },(u,v)=>shade(u*2-1,v));
+}
+/* Throat to body to tip, and darker at the margins. Overlapping pale petals
+   need that edge in 3D as much as they did flat: without it they merge. */
+function petalShade(c,o){
+  o=o||{};
+  // a little more saturated than the flat version: light and shade in a lit
+  // scene wash colour out in a way a painted gradient never did
+  const S=Math.min(96,c.s+8);
+  const throat=rgb(o.throatH??c.h, o.throatS??Math.min(96,S+14), o.throatL??Math.max(16,c.l-22));
+  const body=rgb(c.h,S,c.l);
+  const tip=rgb(o.tipH??c.h, Math.max(16,S-12), o.tipL??Math.min(94,c.l+8));
+  const edge=(c.l>72?0.2:0.1)*(o.edge??1);
+  return (s,v)=>{
+    const col = v<0.32 ? mix3(throat,body,v/0.32) : mix3(body,tip,(v-0.32)/0.68);
+    const e=1-edge*Math.pow(Math.abs(s),4)-edge*0.6*Math.pow(v,8);
+    return [col[0]*e,col[1]*e,col[2]*e];
+  };
+}
+const solid=c=>()=>c;
+
+/* ============================================================================
+   FLOWERS — each built in its own frame, face toward +z
+   ========================================================================== */
+// the golden angle sets out the petals, so the inner whorls spiral as they do
+function rose(B,R,c){
+  const layers=ri(6,8);
+  for(let k=0;k<layers;k++){
+    const t=k/(layers-1);
+    const n=Math.round(lerp(3,8,t));
+    const L=R*lerp(0.32,0.98,t), W=R*lerp(0.46,0.86,t);
+    const col={h:c.h,s:c.s,l:clamp(c.l+lerp(-12,4,t),18,90)};
+    const sh=petalShade(col,{throatL:Math.max(14,c.l-26),tipL:Math.min(90,c.l+lerp(10,4,t))});
+    for(let i=0;i<n;i++){
+      B.push().rotZ(i/n*TAU+k*GOLD+rr(-0.08,0.08)).translate(0,R*lerp(0.02,0.1,t),0);
+      petal(B,L,W,{round:1,belly:0.62,base:0.45,lift:lerp(1.38,0.2,t)+rr(-0.06,0.06),
+        curl:lerp(0.2,-1.0,t*t),cup:lerp(0.5,0.28,t),nu:7,nv:10},sh);
+      B.pop();
+    }
+  }
+}
+// two whorls of three, standing up into a goblet
+function tulip(B,R,c){
+  for(const whorl of [0,1]){
+    const col={h:c.h,s:Math.min(94,c.s+(whorl?4:0)),l:c.l-(whorl?0:8)};
+    const sh=petalShade(col,{throatL:Math.max(14,c.l-28),throatH:(c.h+(c.warm?-10:6))%360,tipL:Math.min(86,c.l+10)});
+    for(let i=0;i<3;i++){
+      B.push().rotZ((whorl?Math.PI/3:0)+i*TAU/3+rr(-0.05,0.05)).translate(0,R*0.05,0);
+      petal(B,R*(whorl?1.0:1.08),R*(whorl?0.8:0.86),{round:0.95,belly:0.6,base:0.55,
+        lift:(whorl?1.34:1.22)+rr(-0.05,0.05),curl:0.2,cup:0.55,nu:8,nv:11},sh);
+      B.pop();
+    }
+  }
+}
+// recurved tepals in two whorls, six anthers on long filaments
+function lily(B,R,c){
+  const spot=rgb(c.h+(c.warm?-16:150),78,38);
+  for(const whorl of [0,1]){
+    const col=whorl?{h:c.h,s:Math.min(96,c.s+10),l:Math.max(30,c.l-6)}:c;
+    const base=petalShade(col,{throatL:Math.min(88,c.l+16),throatS:Math.max(20,c.s-30),tipL:Math.min(90,c.l+14)});
+    // freckles in the throat: a few darker vertices, the way the flat lily scatters dots
+    const sh=(s,v)=>{ const k=base(s,v); return (v>0.12&&v<0.5&&Math.abs(Math.sin(s*37+v*53))>0.93) ? mix3(k,spot,0.7) : k; };
+    for(let i=0;i<3;i++){
+      B.push().rotZ((whorl?Math.PI/3:0)+i*TAU/3+rr(-0.05,0.05));
+      petal(B,R*(whorl?1.05:1.12),R*(whorl?0.46:0.52),{round:0.06,belly:0.42,base:0.12,
+        lift:0.62,curl:-1.9,cup:0.32,twist:rr(-0.2,0.2),nu:6,nv:12},sh);
+      B.pop();
+    }
+  }
+  const fil=rgb(c.h,30,80), anther=rgb((c.h+(c.warm?-20:20))%360,60,30), pistil=rgb(c.h,26,74);
+  for(let i=0;i<6;i++){
+    const a=i/6*TAU+0.3, pts=[];
+    for(let k=0;k<=6;k++){ const t=k/6; pts.push(new T.Vector3(Math.cos(a)*R*0.55*t, Math.sin(a)*R*0.55*t, R*0.62*Math.sin(t*1.4))); }
+    B.tube(pts,R*0.018,R*0.012,()=>fil,4);
+    const e=pts[6];
+    B.ellipsoid(e.x,e.y,e.z,R*0.05,R*0.05,R*0.05,anther,6,4);
+  }
+  B.tube([new T.Vector3(0,0,0),new T.Vector3(0,0,R*0.3),new T.Vector3(0,R*0.05,R*0.62)],R*0.025,R*0.02,()=>pistil,5);
+}
+// a ray of strap petals round a low dome of florets packed on a Fermat spiral
+function gerbera(B,R,c){
+  const disc=R*rr(0.3,0.36);
+  const pc={h:c.h,s:c.s,l:Math.min(86,c.l+6)};
+  const sh=petalShade(pc,{tipL:Math.min(92,c.l+16),throatL:Math.max(28,c.l-6)});
+  for(const ring of [0,1]){
+    const n=ri(18,24)+ring*4;
+    for(let i=0;i<n;i++){
+      B.push().rotZ(i/n*TAU+ring*(Math.PI/n)+rr(-0.03,0.03)).translate(0,disc*0.8,ring?-R*0.03:0);
+      petal(B,R*(ring?0.66:0.72)*rr(0.95,1.05),R*rr(0.15,0.19),{round:0.85,belly:0.5,base:0.5,
+        lift:ring?0.08:0.2,curl:-0.35,cup:0.18,nu:3,nv:6},sh);
+      B.pop();
+    }
+  }
+  const dc=chance(.5)?{h:48,s:70,l:46}:{h:28,s:48,l:22};
+  const dark=rgb(dc.h,dc.s+8,Math.max(8,dc.l-18)), mid=rgb(dc.h,dc.s,dc.l), ring=rgb(dc.h+12,dc.s,Math.min(80,dc.l+30));
+  const domeH=disc*0.38;
+  B.surface(16,5,(u,v)=>{ const a=u*TAU, r=v*disc; return [Math.cos(a)*r,Math.sin(a)*r,domeH*(1-v*v)]; },
+    (u,v)=>mix3(dark,mid,v));
+  const N=Math.floor(70+disc*disc*400);
+  for(let i=0;i<N;i++){
+    const t=i/N, r=Math.sqrt(t)*disc*0.97, a=i*GOLD, edge=r/disc;
+    const fr=disc*lerp(0.06,0.042,edge);
+    B.ellipsoid(Math.cos(a)*r,Math.sin(a)*r,domeH*(1-edge*edge)+fr*0.3,fr,fr,fr*0.7,
+      edge>0.74?ring:mix3(dark,mid,edge),4,3);
+  }
+}
+
+/* ---------- greenery ---------- */
+function leaf(B,L,W,col,o){
+  o=o||{};
+  const dark=rgb(col.h,col.s,Math.max(10,col.l-6)), light=rgb(col.h-6,Math.max(8,col.s-6),col.l+12);
+  petal(B,L,W,{round:o.round??0.05,belly:0.45,base:0.2,lift:o.lift??0,curl:o.curl??0,cup:o.cup??0.2,
+    nu:o.nu||4,nv:o.nv||5},(s,v)=>{ const k=mix3(dark,light,v); const e=1-0.25*(1-Math.abs(s)); return Math.abs(s)<0.12?mix3(k,light,0.5):[k[0]*e,k[1]*e,k[2]*e]; });
+}
+/* A bipinnate frond: every pinna is itself a smaller frond, and the rachis
+   arches over under its own weight. One function, called at two depths. */
+function frond(B,len,depth,col,droop){
+  const steps=10, pts=[];
+  let y=0,z=0,a=0;
+  for(let k=0;k<=steps;k++){
+    pts.push(new T.Vector3(0,y,z));
+    a=droop*Math.pow((k+1)/steps,1.4);
+    y+=Math.cos(a)*len/steps; z-=Math.sin(a)*len/steps;
+  }
+  const stemC=rgb(col.h,col.s,col.l+(depth>1?4:8));
+  B.tube(pts,len*(depth>1?0.012:0.016),len*0.004,()=>stemC,depth>1?5:3);
+  const pairs=depth>1?ri(11,13):ri(7,9);
+  for(let i=1;i<=pairs;i++){
+    const t=i/(pairs+1), k=Math.min(steps-1,Math.floor(t*steps)), f=t*steps-k;
+    const P=pts[k].clone().lerp(pts[k+1],f);
+    const tan=new T.Vector3().subVectors(pts[k+1],pts[k]).normalize();
+    const nrm=new T.Vector3(0,-tan.z,tan.y);       // the frond's face
+    const sub=len*(1-t)*0.5+len*0.04;
+    for(const s of [-1,1]){
+      // each pinna leaves the rachis angled forward, toward the tip
+      const dir=new T.Vector3(s,0,0).multiplyScalar(Math.cos(0.5)).addScaledVector(tan,Math.sin(0.5)).normalize();
+      const X=new T.Vector3().crossVectors(dir,nrm).normalize();
+      const basis=new T.Matrix4().makeBasis(X,dir,new T.Vector3().crossVectors(X,dir));
+      basis.setPosition(P);
+      B.push().apply(basis);
+      if(depth>1) frond(B,sub,depth-1,{h:col.h,s:col.s,l:Math.min(col.l+i*0.4,col.l+4)},droop*0.35);
+      else leaf(B,sub,sub*0.38,{h:col.h,s:col.s+4,l:Math.min(col.l+4,33)},{curl:-0.3,cup:0.15,nu:2,nv:3});
+      B.pop();
+    }
+  }
+}
+// gypsophila: recursive branching, a five-petalled floret at every tip
+function breath(B,len,depth,col,twig){
+  const end=new T.Vector3(0,len,0);
+  B.tube([new T.Vector3(0,0,0),end],len*0.03+0.004,len*0.024+0.003,()=>twig,3);
+  if(depth<=0){
+    const pet=rgb(col.h,col.s,col.l), eye=rgb(col.h+20,Math.min(60,col.s+30),Math.max(40,col.l-18));
+    B.push().translate(0,len,0);
+    for(let i=0;i<5;i++){ const a=i/5*TAU; B.ellipsoid(Math.cos(a)*0.028,0.01,Math.sin(a)*0.028,0.022,0.012,0.022,pet,4,3); }
+    B.ellipsoid(0,0.018,0,0.014,0.01,0.014,eye,4,3);
+    B.pop();
+    return;
+  }
+  const br=ri(2,3);
+  for(let i=0;i<br;i++){
+    B.push().translate(0,len,0).rotY(i/br*TAU+rr(-0.5,0.5)).rotZ(rr(0.35,0.7));
+    breath(B,len*rr(0.6,0.78),depth-1,col,twig);
+    B.pop();
+  }
+}
+
+/* ============================================================================
+   VESSELS — the flat version's half-silhouette profiles, turned on a lathe
+   ========================================================================== */
+const U=0.01;   // flat-version units to scene units
+const VASES={
+  compote:  {label:'Compote',   h:150, w:300, glass:false, mat:{h:34,s:12,l:74},
+             profile:[[0,.60],[.12,.62],[.30,.45],[.44,.15],[.58,.10],[.72,.12],[.88,.32],[1,.40]]},
+  bud:      {label:'Bud vase',  h:210, w:190, glass:true,  mat:{h:186,s:16,l:66},
+             profile:[[0,.15],[.10,.13],[.32,.21],[.62,.31],[.88,.33],[1,.27]]},
+  ginger:   {label:'Ginger jar',h:192, w:258, glass:false, mat:{h:212,s:20,l:80},
+             profile:[[0,.24],[.06,.29],[.24,.46],[.48,.50],[.72,.40],[.90,.30],[1,.27]]},
+  jar:      {label:'Jar',       h:180, w:236, glass:true,  mat:{h:152,s:18,l:62},
+             profile:[[0,.38],[.05,.43],[.11,.39],[.76,.41],[.90,.38],[1,.34]]},
+  cylinder: {label:'Cylinder',  h:205, w:214, glass:true,  mat:{h:30,s:28,l:58},
+             profile:[[0,.34],[.5,.35],[.92,.34],[1,.32]]},
+  urn:      {label:'Urn',       h:206, w:256, glass:false, mat:{h:26,s:10,l:54},
+             profile:[[0,.33],[.08,.40],[.22,.52],[.42,.49],[.58,.33],[.70,.17],[.80,.15],[.90,.24],[1,.34]]},
+  footed:   {label:'Goblet',    h:198, w:222, glass:true,  mat:{h:280,s:14,l:62},
+             profile:[[0,.42],[.16,.46],[.34,.40],[.50,.14],[.68,.09],[.84,.10],[1,.38]]},
+};
+const VASE_KEYS=Object.keys(VASES);
+// sample the same smoothed chain the flat version strokes: [radius, y], mouth down
+function vesselOutline(v){
+  const pts=v.profile.map(([t,hw])=>[hw*v.w*U, -t*v.h*U]);
+  const out=[pts[0]];
+  let cur=pts[0];
+  for(let i=0;i<pts.length-1;i++){
+    const c=pts[i], e=[(pts[i][0]+pts[i+1][0])/2,(pts[i][1]+pts[i+1][1])/2];
+    for(let k=1;k<=8;k++){
+      const t=k/8, u=1-t;
+      out.push([u*u*cur[0]+2*u*t*c[0]+t*t*e[0], u*u*cur[1]+2*u*t*c[1]+t*t*e[1]]);
+    }
+    cur=e;
+  }
+  out.push(pts[pts.length-1]);
+  return out;
+}
+function buildVessel(key,group){
+  const v=VASES[key], m=v.mat, H=v.h*U;
+  const outline=vesselOutline(v);
+  // lathe from the centre of the base, up the outside, over the lip, down inside
+  const P=[new T.Vector2(0,-H-0.004)];
+  for(let i=outline.length-1;i>=0;i--) P.push(new T.Vector2(outline[i][0],outline[i][1]));
+  const wall=v.glass?0.035:0.06, r0=outline[0][0];
+  P.push(new T.Vector2(r0-wall*0.5,0.012), new T.Vector2(r0-wall,-0.02));
+  for(let i=1;i<outline.length;i++){
+    const [r,y]=outline[i]; if(y<-H*0.9) break;
+    P.push(new T.Vector2(Math.max(0.01,r-wall),y));
+  }
+  P.push(new T.Vector2(0.001,-H*0.9));
+  const geo=new T.LatheGeometry(P,72);
+  _c.setHSL(m.h/360,m.s/100,m.l/100);
+  if(!v.glass){
+    const mesh=new T.Mesh(geo,new T.MeshPhysicalMaterial({color:_c.clone(),roughness:0.38,clearcoat:0.5,clearcoatRoughness:0.35}));
+    mesh.castShadow=mesh.receiveShadow=true;
+    group.add(mesh);
+    return;
+  }
+  // Glass: mostly transparent, so the form comes from reflections at its edges.
+  // Back faces first, then front, so the far wall shows through the near one.
+  for(const side of [T.BackSide,T.FrontSide]){
+    const mat=new T.MeshPhysicalMaterial({color:_c.clone(),roughness:0.04,metalness:0,clearcoat:1,
+      transparent:true,opacity:side===T.BackSide?0.16:0.22,depthWrite:false,side,envMapIntensity:1.6});
+    const mesh=new T.Mesh(geo,mat); mesh.renderOrder=side===T.BackSide?1:3;
+    group.add(mesh);
+  }
+  // the water, a little inside the wall, from the waterline down
+  const wl=-H*0.42, W=[new T.Vector2(0,-H*0.88)];
+  for(let i=outline.length-1;i>=0;i--){ const [r,y]=outline[i]; if(y<=wl) W.push(new T.Vector2(Math.max(0.01,r-wall*1.4),y)); }
+  W.push(new T.Vector2(0,wl));
+  _c.setHSL(m.h/360,Math.min(1,(m.s+16)/100),Math.max(0.1,(m.l-24)/100));
+  const water=new T.Mesh(new T.LatheGeometry(W,64),new T.MeshPhysicalMaterial({color:_c.clone(),roughness:0.1,
+    transparent:true,opacity:0.3,depthWrite:false,envMapIntensity:1.2}));
+  water.renderOrder=2;
+  group.add(water);
+}
+
+/* ============================================================================
+   THE ARRANGEMENT
+   Blooms sit on a Fibonacci spiral over a dome — the golden angle again,
+   one scale up — so they are evenly spread from every side the table turns
+   to. Each faces out along the dome, a little skyward, the way a head leans
+   on its stem: turned faces are simply what the dome looks like from here.
+   ========================================================================== */
+const WALLPAPER = typeof window.wallpaperRegisterAudioListener==='function'
+               || /(?:\?|&)mode=wallpaper\b/.test(location.search);
+let FORCE_VASE=null, FULLNESS=1;
+const SPECIES={
+  rose:  {fn:rose,   label:'Rose',   plural:'Roses',   plain:'Garden Rose',  leaf:true},
+  lily:  {fn:lily,   label:'Lily',   plural:'Lilies',  plain:'Lily',         leaf:true},
+  tulip: {fn:tulip,  label:'Tulip',  plural:'Tulips',  plain:'French Tulip', leaf:true},
+  daisy: {fn:gerbera,label:'Gerbera',plural:'Gerberas',plain:'Gerbera Daisy',leaf:false},
+};
+const SPECIES_KEYS=Object.keys(SPECIES);
+function speciesName(key,col){ const t=CULTIVARS[key]; return (t&&t[hueBand(col)])||SPECIES[key].plain; }
+
+const DOME={cy:0.35, R:3.25, squash:0.86, cap:1.22};
+function headFrame(p,face,spin){
+  // face is the head's +z; any perpendicular will do for x, then spin about z
+  const z=face.clone().normalize();
+  const ref=Math.abs(z.y)<0.95?new T.Vector3(0,1,0):new T.Vector3(1,0,0);
+  const x=new T.Vector3().crossVectors(ref,z).normalize();
+  const y=new T.Vector3().crossVectors(z,x);
+  const m=new T.Matrix4().makeBasis(x,y,z).multiply(new T.Matrix4().makeRotationZ(spin));
+  m.setPosition(p);
+  return m;
+}
+function stemCurve(from,face,mouthR,H){
+  const back=from.clone().addScaledVector(face,-0.45);
+  const rIn=Math.hypot(from.x,from.z)||1;
+  const mid=new T.Vector3(from.x*0.42,from.y*0.45,from.z*0.42);
+  const k=Math.min(1,mouthR*0.62/rIn);
+  const mouth=new T.Vector3(from.x*k*0.9,0.02,from.z*k*0.9);
+  const low=new T.Vector3(from.x*k*0.25,-H*0.78,from.z*k*0.25);
+  return new T.CatmullRomCurve3([from,back,mid,mouth,low]).getPoints(26);
+}
+function buildArrangement(seed){
+  RNG=mulberry32(seed>>>0);
+  const pal=buildPalette();
+  const hero=pick(['rose','rose','lily','tulip','daisy']);
+  const others=[];
+  const nOthers=ri(1,2);
+  while(others.length<nOthers){ const k=pick(SPECIES_KEYS.filter(k=>k!==hero)); if(!others.includes(k)) others.push(k); }
+  const vase=FORCE_VASE||pick(VASE_KEYS);
+  const V=VASES[vase], H=V.h*U, mouthR=V.profile[0][1]*V.w*U;
+  const dominant=pal.cultivars[0];
+  const pickCultivar=()=> chance(.62) ? dominant : pick(pal.cultivars.slice(1));
+  const colourFor=k=>{ const b=pickCultivar(); return speciesColour(k,floralColour(b.h+gauss(0,5),b.s+gauss(0,5),b.l+gauss(0,4),pal.warm)); };
+
+  const P=new Builder(), G=new Builder();
+  const f=pal.foliage, stemCol=rgb(f.h,f.s,f.l+12), stemDark=rgb(f.h,f.s,Math.max(10,f.l-6));
+  const stemShade=v=>mix3(stemCol,stemDark,v);
+  const heads=[];
+
+  // the dome
+  const N=Math.max(8,Math.round(ri(24,30)*FULLNESS));
+  const capCos=1-Math.cos(DOME.cap);
+  for(let i=0;i<N;i++){
+    const t=(i+0.5)/N, th=Math.acos(1-t*capCos)+gauss(0,0.04), ph=i*GOLD+gauss(0,0.08);
+    const n=new T.Vector3(Math.sin(th)*Math.cos(ph),Math.cos(th),Math.sin(th)*Math.sin(ph));
+    const rad=DOME.R*rr(0.9,1.05);
+    const p=new T.Vector3(n.x*rad,DOME.cy+n.y*rad*DOME.squash,n.z*rad);
+    const spKey=i===N-1?hero:(chance(.4)?hero:pick(others));
+    heads.push({p,n,spKey,R:(spKey===hero?rr(0.86,1.06):rr(0.66,0.88)),col:colourFor(spKey)});
+  }
+  // the heart, so the dome is not hollow when seen from above
+  for(let i=0;i<ri(2,4);i++){
+    const ph=rr(0,TAU), th=rr(0,0.5);
+    const n=new T.Vector3(Math.sin(th)*Math.cos(ph),Math.cos(th),Math.sin(th)*Math.sin(ph));
+    const p=new T.Vector3(n.x*DOME.R*0.62,DOME.cy+n.y*DOME.R*0.62*DOME.squash,n.z*DOME.R*0.62);
+    const spKey=chance(.5)?hero:pick(others);
+    heads.push({p,n,spKey,R:rr(0.66,0.86),col:colourFor(spKey)});
+  }
+  for(const h of heads){
+    // faces lean skyward a little, and no two lean quite alike
+    const face=h.n.clone().add(new T.Vector3(gauss(0,0.12),0.32,gauss(0,0.12))).normalize();
+    P.push().apply(headFrame(h.p,face,rr(0,TAU)));
+    SPECIES[h.spKey].fn(P,h.R,h.col);
+    P.pop();
+    const pts=stemCurve(h.p.clone().addScaledVector(face,-h.R*0.05),face,mouthR,H);
+    G.tube(pts,0.045*h.R,0.05*h.R,stemShade,6);
+    // a leaf or two on the stems that show
+    if(SPECIES[h.spKey].leaf && chance(.55)){
+      const k=Math.floor(rr(5,10)), at=pts[k], nxt=pts[k+1];
+      const tan=new T.Vector3().subVectors(at,nxt).normalize();
+      const out=new T.Vector3(at.x,0,at.z).normalize();
+      const dir=tan.clone().multiplyScalar(0.55).addScaledVector(out,0.8).normalize();
+      const X=new T.Vector3().crossVectors(dir,new T.Vector3(0,1,0)).normalize();
+      const basis=new T.Matrix4().makeBasis(X,dir,new T.Vector3().crossVectors(X,dir)); basis.setPosition(at);
+      G.push().apply(basis);
+      leaf(G,h.spKey==='tulip'?1.2:0.62,h.spKey==='tulip'?0.3:0.26,{h:f.h,s:f.s+3,l:f.l+4},{curl:-0.6,cup:0.3,nv:6});
+      G.pop();
+    }
+  }
+
+  // ferns rise up through the flowers and arch over, all the way round
+  const nF=ri(6,8);
+  for(let i=0;i<nF;i++){
+    const ph=i/nF*TAU+rr(-0.25,0.25), el=rr(0.95,1.3);
+    const dir=new T.Vector3(Math.cos(ph)*Math.cos(el),Math.sin(el),Math.sin(ph)*Math.cos(el));
+    const base=new T.Vector3(Math.cos(ph)*mouthR*0.45,0.05,Math.sin(ph)*mouthR*0.45);
+    const up=new T.Vector3(0,1,0);
+    const Z=up.clone().addScaledVector(dir,-up.dot(dir)).normalize();
+    const X=new T.Vector3().crossVectors(dir,Z);
+    const basis=new T.Matrix4().makeBasis(X,dir,Z); basis.setPosition(base);
+    G.push().apply(basis);
+    frond(G,rr(3.6,4.4),2,{h:f.h,s:f.s,l:Math.max(14,f.l-5)},rr(1.5,2.0));
+    G.pop();
+    G.tube([base,new T.Vector3(base.x*0.4,-H*0.4,base.z*0.4),new T.Vector3(base.x*0.2,-H*0.78,base.z*0.2)],0.03,0.035,stemShade,4);
+  }
+
+  // gypsophila threaded through the dome
+  const bc={h:(pal.base+(pal.warm?30:180))%360, s:rr(10,26), l:rr(84,94)};
+  const twig=rgb(120,18,46);
+  for(let i=0;i<ri(10,14);i++){
+    const t=rnd(), th=Math.acos(1-t*capCos), ph=rr(0,TAU);
+    const n=new T.Vector3(Math.sin(th)*Math.cos(ph),Math.cos(th),Math.sin(th)*Math.sin(ph));
+    const rad=DOME.R*rr(0.96,1.1);
+    const p=new T.Vector3(n.x*rad,DOME.cy+n.y*rad*DOME.squash,n.z*rad);
+    const face=n.clone().add(new T.Vector3(0,0.5,0)).normalize();
+    const m=headFrame(p,face,0).multiply(new T.Matrix4().makeRotationX(Math.PI/2));
+    P.push().apply(m);
+    breath(P,rr(0.32,0.42),4,{h:bc.h,s:bc.s+gauss(0,4),l:bc.l},twig);
+    P.pop();
+    G.tube(stemCurve(p,face,mouthR,H),0.02,0.024,stemShade,4);
+  }
+
+  return {pal, hero, vase, seed:seed>>>0, scheme:pal.name, heads,
+    petals:P.geometry(), green:G.geometry(), H, mouthR};
+}
+
+/* ============================================================================
+   STAGE
+   ========================================================================== */
+const canvas=document.getElementById('stage');
+let renderer=null;
+try{
+  renderer=new T.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});
+}catch(_){ document.body.classList.add('no-webgl'); }
+
+const scene=new T.Scene();
+const camera=new T.PerspectiveCamera(28,1,0.1,200);
+const table=new T.Group();      // everything that turns
+scene.add(table);
+let DPR=1, W=1, H=1;
+const MAX_CANVAS_PX=9.0e6;
+
+if(renderer){
+  renderer.outputColorSpace=T.SRGBColorSpace;
+  // no filmic curve: it pulls saturated petals toward grey, and these
+  // colours were chosen to be seen as they are
+  renderer.toneMapping=T.NoToneMapping;
+  renderer.shadowMap.enabled=true;
+  renderer.shadowMap.type=T.PCFSoftShadowMap;
+}
+
+/* A small room to reflect: the glass and glaze need something to catch, or
+   they read as flat colour. Built here rather than loaded, so nothing is
+   fetched. */
+function roomEnvironment(){
+  const room=new T.Scene();
+  const box=new T.Mesh(new T.BoxGeometry(1,1,1),new T.MeshBasicMaterial({color:0x3a3530,side:T.BackSide}));
+  box.scale.set(16,10,16); room.add(box);
+  const panel=(x,y,z,sx,sy,sz,c)=>{ const m=new T.Mesh(new T.BoxGeometry(1,1,1),new T.MeshBasicMaterial({color:c})); m.position.set(x,y,z); m.scale.set(sx,sy,sz); room.add(m); };
+  panel(-4,4.9,2,5,0.1,3,new T.Color(5,4.6,4.0));      // the window the key light comes through
+  panel(6,2,-3,0.1,3,4,new T.Color(1.2,1.25,1.4));     // a cool bounce from the far side
+  panel(0,-4.9,0,10,0.1,10,new T.Color(0.12,0.1,0.08));
+  const pm=new T.PMREMGenerator(renderer);
+  const tex=pm.fromScene(room,0.04).texture;
+  pm.dispose();
+  return tex;
+}
+let KEY=null;
+if(renderer){
+  scene.environment=roomEnvironment();
+  KEY=new T.DirectionalLight(new T.Color().setHSL(40/360,0.22,0.96),1.5);
+  KEY.position.set(-5,9,7);
+  KEY.castShadow=true;
+  KEY.shadow.mapSize.set(2048,2048);
+  const sc=KEY.shadow.camera; sc.left=-7; sc.right=7; sc.top=8; sc.bottom=-5; sc.near=1; sc.far=30;
+  KEY.shadow.bias=-0.0006; KEY.shadow.normalBias=0.045;
+  scene.add(KEY);
+  const rim=new T.DirectionalLight(new T.Color().setHSL(215/360,0.3,0.85),0.7);
+  rim.position.set(4,5,-7); scene.add(rim);
+  scene.add(new T.HemisphereLight(0xfff1e2,0x2a221c,1.0));
+}
+
+// the backdrop: the flat version's ground and vignette, as a screen-space texture
+function backdrop(pal){
+  const c=document.createElement('canvas'); c.width=c.height=512;
+  const o=c.getContext('2d'), p=pal.ground, hsl=(h,s,l,a=1)=>`hsla(${h},${s}%,${l}%,${a})`;
+  let g=o.createRadialGradient(256,226,25,256,282,486);
+  g.addColorStop(0,hsl(p.h,p.s,p.l+7)); g.addColorStop(0.5,hsl(p.h,p.s,p.l+1)); g.addColorStop(1,hsl(p.h,p.s+4,Math.max(3,p.l-5)));
+  o.fillStyle=g; o.fillRect(0,0,512,512);
+  g=o.createRadialGradient(256,236,6,256,236,282);
+  g.addColorStop(0,hsl(pal.base,40,60,.10)); g.addColorStop(1,hsl(pal.base,40,60,0));
+  o.fillStyle=g; o.fillRect(0,0,512,512);
+  g=o.createRadialGradient(256,256,174,256,266,380);
+  g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,.5)');
+  o.fillStyle=g; o.fillRect(0,0,512,512);
+  o.globalAlpha=0.03;
+  for(let i=0;i<9000;i++){ o.fillStyle=Math.random()<.5?'#000':'#fff'; o.fillRect(Math.random()*512,Math.random()*512,1,1); }
+  const t=new T.CanvasTexture(c); t.colorSpace=T.SRGBColorSpace;
+  return t;
+}
+// a soft dark pool under the vessel, plus the real cast shadows
+function contactShadow(r){
+  const c=document.createElement('canvas'); c.width=c.height=128;
+  const o=c.getContext('2d'), g=o.createRadialGradient(64,64,4,64,64,64);
+  g.addColorStop(0,'rgba(0,0,0,.55)'); g.addColorStop(1,'rgba(0,0,0,0)');
+  o.fillStyle=g; o.fillRect(0,0,128,128);
+  const m=new T.Mesh(new T.PlaneGeometry(r*2.6,r*2.6),new T.MeshBasicMaterial({map:new T.CanvasTexture(c),transparent:true,depthWrite:false}));
+  m.rotation.x=-Math.PI/2;
+  return m;
+}
+
+let ARR=null, CURRENT_SEED=0;
+const MAT={};
+if(renderer){
+  // petals are matte and faintly velvet; too much sheen or reflection greys them
+  MAT.petal=new T.MeshPhysicalMaterial({vertexColors:true,side:T.DoubleSide,roughness:0.68,
+    specularIntensity:0.3,sheen:0.06,sheenRoughness:0.8,sheenColor:new T.Color(1,1,1),envMapIntensity:0.35});
+  MAT.green=new T.MeshStandardMaterial({vertexColors:true,side:T.DoubleSide,roughness:0.7,envMapIntensity:0.4});
+  MAT.petal.shadowSide=MAT.green.shadowSide=T.DoubleSide;
+}
+function clearTable(){
+  for(const o of [...table.children]){
+    table.remove(o);
+    o.traverse(x=>{
+      if(x.geometry) x.geometry.dispose();
+      if(x.material && x.material!==MAT.petal && x.material!==MAT.green){
+        if(x.material.map) x.material.map.dispose();
+        x.material.dispose();
+      }
+    });
+  }
+}
+function stageArrangement(a){
+  clearTable();
+  const pm=new T.Mesh(a.petals,MAT.petal), gm=new T.Mesh(a.green,MAT.green);
+  for(const m of [pm,gm]){ m.castShadow=m.receiveShadow=true; table.add(m); }
+  buildVessel(a.vase,table);
+  const floor=new T.Mesh(new T.PlaneGeometry(40,40),new T.ShadowMaterial({opacity:0.34}));
+  floor.rotation.x=-Math.PI/2; floor.position.y=-a.H; floor.receiveShadow=true;
+  table.add(floor);
+  const pool=contactShadow(VASES[a.vase].w*U*0.5); pool.position.y=-a.H+0.003;
+  table.add(pool);
+  if(scene.background) scene.background.dispose();
+  scene.background=backdrop(a.pal);
+  document.body.style.background=`hsl(${a.pal.ground.h},${a.pal.ground.s}%,${a.pal.ground.l}%)`;
+}
+
+/* ---------- framing ---------- */
+const VIEW={el:0.2, yaw:0, dist:20, cy:1.1};
+function frame(){
+  if(!ARR) return;
+  const top=DOME.cy+DOME.R*DOME.squash+1.05, bottom=-ARR.H-0.2;
+  const halfH=(top-bottom)/2, halfW=DOME.R+1.0;
+  VIEW.cy=(top+bottom)/2;
+  const vf=T.MathUtils.degToRad(camera.fov)/2, aspect=W/H;
+  // whichever of height or width binds; the near side of the dome is closer
+  // to the camera than its centre, hence the allowance for depth
+  VIEW.dist=Math.max(halfH/Math.tan(vf), halfW/(Math.tan(vf)*aspect))*1.08+halfW*0.3;
+}
+function placeCamera(){
+  const el=VIEW.el+PAR.y*0.06, yaw=VIEW.yaw+PAR.x*0.14;
+  camera.position.set(Math.sin(yaw)*Math.cos(el)*VIEW.dist, VIEW.cy+Math.sin(el)*VIEW.dist, Math.cos(yaw)*Math.cos(el)*VIEW.dist);
+  camera.lookAt(0,VIEW.cy-0.25,0);
+}
+function resize(){
+  if(!renderer) return;
+  DPR=WALLPAPER?1:Math.min(devicePixelRatio||1,2);
+  W=Math.max(1,innerWidth||document.documentElement.clientWidth||0);
+  H=Math.max(1,innerHeight||document.documentElement.clientHeight||0);
+  if(W*H*DPR*DPR>MAX_CANVAS_PX) DPR=Math.max(0.6,Math.sqrt(MAX_CANVAS_PX/(W*H)));
+  renderer.setPixelRatio(DPR); renderer.setSize(W,H,false);
+  camera.aspect=W/H; camera.updateProjectionMatrix();
+  frame(); kick();
+}
+
+/* ============================================================================
+   MOTION — only while something moves
+   The turntable, the cursor's parallax and a new bouquet's arrival each ask
+   for frames; when none of them do, the loop stops and the GPU idles.
+   ========================================================================== */
+const reduceMotion=matchMedia('(prefers-reduced-motion:reduce)').matches;
+let TURN_SECONDS=reduceMotion?0:150;     // one full turn of the table; 0 holds it still
+let PARALLAX=!reduceMotion, FPS_CAP=WALLPAPER?30:60, MOTION=true;
+const PAR={x:0,y:0,tx:0,ty:0};
+let ARRIVE=null, running=false, lastFrame=0, lastTick=0;
+function wantsFrames(){
+  return (TURN_SECONDS>0) || ARRIVE || Math.abs(PAR.tx-PAR.x)>1e-4 || Math.abs(PAR.ty-PAR.y)>1e-4;
+}
+function kick(){
+  if(running||!renderer||document.hidden) return;
+  running=true; lastTick=performance.now(); requestAnimationFrame(loop);
+}
+function loop(now){
+  if(document.hidden){ running=false; return; }
+  if(now-lastFrame < 1000/FPS_CAP-2){ requestAnimationFrame(loop); return; }
+  lastFrame=now;
+  const dt=Math.min(0.1,(now-lastTick)/1000); lastTick=now;
+  if(TURN_SECONDS>0) table.rotation.y+=dt*TAU/TURN_SECONDS;
+  const k=1-Math.exp(-dt*3.2);
+  PAR.x+=(PAR.tx-PAR.x)*k; PAR.y+=(PAR.ty-PAR.y)*k;
+  if(Math.abs(PAR.tx-PAR.x)<1e-4) PAR.x=PAR.tx;
+  if(Math.abs(PAR.ty-PAR.y)<1e-4) PAR.y=PAR.ty;
+  if(ARRIVE){
+    const t=clamp((now-ARRIVE.start)/ARRIVE.ms,0,1);
+    const s=0.84+0.16*easeOutBack(t);
+    table.scale.setScalar(s);
+    table.position.y=(1-easeOut(t))*-0.35;
+    if(t>=1){ ARRIVE=null; table.scale.setScalar(1); table.position.y=0; }
+  }
+  placeCamera();
+  renderer.render(scene,camera);
+  if(wantsFrames()) requestAnimationFrame(loop); else running=false;
+}
+addEventListener('pointermove',e=>{
+  if(!PARALLAX) return;
+  PAR.tx=clamp((e.clientX/W)*2-1,-1,1); PAR.ty=clamp((e.clientY/H)*2-1,-1,1);
+  kick();
+},{passive:true});
+addEventListener('visibilitychange',()=>{ if(!document.hidden) kick(); });
+
+/* ============================================================================
+   PLACARD
+   ========================================================================== */
+function refreshPlacard(a){
+  const present=[...new Set(a.heads.map(h=>h.spKey))];
+  const names=present.map(k=>speciesName(k,a.heads.find(h=>h.spKey===k).col));
+  const tally={}; for(const h of a.heads) tally[h.spKey]=(tally[h.spKey]||0)+1;
+  const ranked=Object.keys(tally).sort((x,y)=>tally[y]-tally[x]);
+  const lead=SPECIES[ranked[0]].plural, second=ranked[1]?SPECIES[ranked[1]].plural:null;
+  const warm=a.pal.warm, vivid=a.pal.vivid;
+  const moods = warm
+    ? (vivid?['Ember','Fanfare','Vermeil','Coral Hour','Saffron','High Summer','Bonfire','Carnival']
+            :['Blush','Warm Light','Honey','Late Afternoon','Apricot Hour','Linen','Old Gold','Tea Rose'])
+    : (vivid?['Nocturne','Cobalt','Indigo Hour','Violet Hour','Midnight Garden','Ultramarine','Thunderhead']
+            :['Frost','Porcelain','Still Air','Pale Morning','First Light','Moonlit','Hoarfrost','Quiet Room']);
+  RNG=mulberry32(a.seed^0x5bf03635);
+  const mood=pick(moods);
+  const forms=[
+    ()=>`${mood}, with ${lead}`,
+    ()=>second?`${lead} and ${second}`:`${mood}, with ${lead}`,
+    ()=>`${lead} in the Round`,
+    ()=>`${lead} in a ${VASES[a.vase].label}`,
+    ()=>`Study of ${lead}`+(second?`, with ${second}`:''),
+  ];
+  document.getElementById('pTitle').textContent=pick(forms)();
+  document.getElementById('pSpecies').textContent=
+    names.concat(['Gypsophila','Fern']).join('  ·  ')+'  ·  in a '+VASES[a.vase].label.toLowerCase();
+  document.getElementById('pSeed').textContent='№ '+String(a.seed).padStart(6,'0').slice(-6);
+  document.getElementById('pScheme').textContent=a.scheme+' harmony';
+}
+
+/* ============================================================================
+   BOUQUETS, HISTORY, SAVING
+   ========================================================================== */
+const fadeEl=document.getElementById('fade');
+function start(seed,opts){
+  opts=opts||{};
+  if(!renderer) return;
+  // a still of the bouquet that is there, to dissolve over the new one
+  if(ARR && MOTION && !reduceMotion){
+    try{ placeCamera(); renderer.render(scene,camera); fadeEl.src=canvas.toDataURL('image/jpeg',0.82);
+      fadeEl.classList.remove('out'); fadeEl.style.opacity='1'; }catch(_){}
+  }
+  CURRENT_SEED=seed>>>0;
+  ARR=buildArrangement(CURRENT_SEED);
+  stageArrangement(ARR);
+  refreshPlacard(ARR);
+  frame();
+  table.rotation.y=(ARR.seed%360)/360*TAU;     // each bouquet arrives at its own angle
+  setHash('#s='+CURRENT_SEED,!!opts.push);
+  if(MOTION && !reduceMotion){
+    ARRIVE={start:performance.now(),ms:1150};
+    requestAnimationFrame(()=>{ fadeEl.classList.add('out'); fadeEl.style.opacity='0'; });
+  }
+  kick();
+}
+function regen(){ start(newSeed(),{push:true}); }
+
+let LAST_HASH='', HIST_N=0, HIST_TOP=0;
+function setHash(h,push){
+  LAST_HASH=h;
+  if(WALLPAPER) return;
+  try{
+    if(push){ HIST_N++; HIST_TOP=HIST_N; history.pushState({n:HIST_N},'',h); }
+    else history.replaceState({n:HIST_N},'',h);
+  }catch(_){}
+}
+function onNav(){
+  const h=location.hash;
+  if(!h||h===LAST_HASH) return;
+  const n=history.state&&history.state.n;
+  if(typeof n==='number') HIST_N=n; else { HIST_N=++HIST_TOP; try{ history.replaceState({n:HIST_N},'',h); }catch(_){} }
+  const m=h.match(/s=(\d+)/);
+  if(m) start(parseInt(m[1],10));
+}
+addEventListener('hashchange',onNav);
+addEventListener('popstate',onNav);
+
+const hintEl=document.getElementById('hint');
+function hint(msg,ms){
+  hintEl.textContent=msg; hintEl.classList.add('show');
+  clearTimeout(hint._t); if(ms) hint._t=setTimeout(()=>hintEl.classList.remove('show'),ms);
+}
+function save(){
+  if(!renderer) return;
+  placeCamera(); renderer.render(scene,camera);       // capture in the same task as the draw
+  canvas.toBlob(b=>{
+    if(!b){ hint('That image could not be saved',3000); return; }
+    const url=URL.createObjectURL(b), a=document.createElement('a');
+    a.href=url; a.download='still-life-3d-'+CURRENT_SEED+'.png';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),5000);
+  },'image/png');
+}
+function setTurning(on){
+  TURN_SECONDS=on?(TURN_SECONDS||150):0;
+  document.getElementById('turn').classList.toggle('on',TURN_SECONDS>0);
+  hint(TURN_SECONDS>0?'The table turns':'Held still',1600);
+  kick();
+}
+document.getElementById('regen').addEventListener('click',regen);
+document.getElementById('save').addEventListener('click',save);
+document.getElementById('turn').addEventListener('click',()=>setTurning(!(TURN_SECONDS>0)));
+document.getElementById('turn').classList.toggle('on',TURN_SECONDS>0);
+addEventListener('keydown',e=>{
+  if(e.ctrlKey||e.metaKey||e.altKey) return;
+  if(e.code==='Space'){ e.preventDefault(); regen(); }
+  else if(e.key==='s'||e.key==='S') save();
+  else if(e.key==='t'||e.key==='T') setTurning(!(TURN_SECONDS>0));
+  else if(e.key==='ArrowLeft'){ if(HIST_N>0) history.back(); }
+  else if(e.key==='ArrowRight'){ if(HIST_N<HIST_TOP) history.forward(); else regen(); }
+});
+
+/* ============================================================================
+   WALLPAPER ENGINE
+   ========================================================================== */
+let CYCLE_MS=0, cycleTimer=null;
+function armCycle(){
+  clearTimeout(cycleTimer);
+  if(!CYCLE_MS) return;
+  cycleTimer=setTimeout(()=>{ if(!document.hidden) regen(); armCycle(); },CYCLE_MS);
+}
+if(WALLPAPER){
+  document.body.classList.add('wallpaper');
+  CYCLE_MS=90000;
+  addEventListener('visibilitychange',()=>{ if(!document.hidden) armCycle(); });
+}
+window.wallpaperPropertyListener={
+  applyUserProperties(p){
+    let rebuild=false;
+    if(p.cycleseconds){ CYCLE_MS=Math.max(0,p.cycleseconds.value|0)*1000; armCycle(); }
+    if(p.turnseconds){ TURN_SECONDS=Math.max(0,p.turnseconds.value|0); kick(); }
+    if(p.parallax){ PARALLAX=!!p.parallax.value; if(!PARALLAX){ PAR.tx=PAR.ty=0; kick(); } }
+    if(p.fps){ FPS_CAP=clamp(p.fps.value|0,10,144); }
+    if(p.vessel){ const v=p.vessel.value; FORCE_VASE=(v&&v!=='random'&&v in VASES)?v:null; rebuild=true; }
+    if(p.fullness){ FULLNESS=clamp(p.fullness.value/100,0.4,1.6); rebuild=true; }
+    if(p.showplacard) document.body.classList.toggle('no-placard',!p.showplacard.value);
+    if(p.motion) MOTION=!!p.motion.value;
+    if(rebuild) regen();
+  },
+};
+
+/* ============================================================================
+   BOOT
+   ========================================================================== */
+let lastW=0,lastH=0;
+function onGeometry(){
+  const w=innerWidth||0, h=innerHeight||0;
+  if(w<1||h<1) return;
+  if(Math.abs(w-lastW)<2&&Math.abs(h-lastH)<2) return;
+  lastW=w; lastH=h; resize();
+}
+addEventListener('resize',onGeometry);
+if(window.ResizeObserver) new ResizeObserver(onGeometry).observe(document.documentElement);
+if(renderer){
+  resize(); lastW=W; lastH=H;
+  if(history.state && typeof history.state.n==='number') HIST_N=HIST_TOP=history.state.n;
+  const m=location.hash.match(/s=(\d+)/);
+  start(m?parseInt(m[1],10):newSeed());
+  if(WALLPAPER) armCycle();
+}
+</script>
